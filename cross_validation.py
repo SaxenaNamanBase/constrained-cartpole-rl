@@ -47,8 +47,11 @@ def cross_validation_qlearning(model_class, exploration_strategy_class, config, 
         print(f"Initial Learning Rate for Fold {fold + 1}: {initial_lr}")
 
         # Reset environment and logger for each fold
-        env = GymWrapper(gym.make('CartPole-v1'))
+        #env = GymWrapper(gym.make('CartPole-v1'))
         #env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))
+        env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
+                 mode=config.STATE_MODE, 
+                 action_mode=config.ACTION_MODE)
         exploration_strategy = exploration_strategy_class(epsilon=config.CONTROL_PARAMS['epsilon'])
         controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
         logger = DataLogger(config.LOG_PARAMS)
@@ -144,15 +147,22 @@ def cross_validation_qlearning(model_class, exploration_strategy_class, config, 
 
 def train_dqn(model_class, exploration_strategy_class, config):
     # Load your custom environment
-    env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))  # Use your custom CartPole env
-    eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))  # Same for evaluation
+    '''env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))  # Use your custom CartPole env
+    eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))  # Same for evaluation'''
+
+    env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
+                 mode=config.STATE_MODE, 
+                 action_mode=config.ACTION_MODE)
+    eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
+                      mode=config.STATE_MODE, 
+                      action_mode=config.ACTION_MODE)
 
     # Updated dimensions: state_dim now only includes pole_angle and pole_velocity (2 dimensions), action_dim is motor speed (1 dimension)
     #state_dim = env.observation_space[0]  # pole_angle, pole_velocity
     #action_dim = env.env.action_space.n  # motor speed (continuous action)
 
-    state_dim = env.env.observation_space.shape[0]
-    action_dim = env.env.action_space.n
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n
 
     # Initialize DQN controller
     controller = model_class(config.CONTROL_PARAMS, exploration_strategy_class(config.CONTROL_PARAMS['epsilon']), state_dim, action_dim)
@@ -256,10 +266,17 @@ def train_dqn(model_class, exploration_strategy_class, config):
     return controller
 
 def train_dqn_until_overfitting(model_class, exploration_strategy_class, config, max_episodes=5000):
-    env = GymWrapper(gym.make('CartPole-v1'))
-    eval_env = GymWrapper(gym.make('CartPole-v1'))
-    state_dim = env.env.observation_space.shape[0]
-    action_dim = env.env.action_space.n
+    '''env = GymWrapper(gym.make('CartPole-v1'))
+    eval_env = GymWrapper(gym.make('CartPole-v1'))'''
+    
+    env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
+                 mode=config.STATE_MODE, 
+                 action_mode=config.ACTION_MODE)
+    eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
+                      mode=config.STATE_MODE, 
+                      action_mode=config.ACTION_MODE)
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n if config.ACTION_MODE == 'discrete' else 1
     controller = model_class(config.CONTROL_PARAMS, exploration_strategy_class(config.CONTROL_PARAMS['epsilon']), state_dim, action_dim)
     logger = DataLogger(config.LOG_PARAMS)
 
@@ -479,14 +496,15 @@ def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path=
     else:
         raise ValueError("Unknown algorithm specified. Use 'qlearning' or 'dqn'.")'''
   
-def run_cross_validation_or_training(algorithm, mode, stop_logic):
+def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
     # 1. Update global config variables based on dropdown choices
     config.STATE_MODE = mode
     config.STOP_LOGIC = stop_logic
+    config.ACTION_MODE = action_mode
     config.STATE_DIM = 2 if mode == '2D' else 4
 
     print(f"--- Configuration Updated ---")
-    print(f"Algorithm: {algorithm} | Mode: {config.STATE_MODE} | State Dim: {config.STATE_DIM}")
+    print(f"Algorithm: {algorithm} | Mode: {config.STATE_MODE} | State Dim: {config.STATE_DIM} | Action: {action_mode}")
 
     # 2. Q-LEARNING BLOCK
     if algorithm == 'qlearning':

@@ -35,7 +35,8 @@ class DQNNetwork(nn.Module):
     def forward(self, x):
         x = torch.relu(self.fc1(x)) ###
         x = torch.relu(self.fc2(x))
-        return torch.tanh(self.fc3(x))
+        #return torch.tanh(self.fc3(x))
+        return self.fc3(x)
 
 # 2. Define the Replay Buffer class
 class ReplayBuffer:

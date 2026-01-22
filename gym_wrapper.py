@@ -11,11 +11,19 @@ register(
 )
 
 class CustomCartPoleEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, action_mode='discrete'):
         super(CustomCartPoleEnv, self).__init__()
         
+        self.action_mode = action_mode
         # Define action space (continuous motor speed, e.g., from -1.0 to 1.0)
-        self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+        #self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+
+        if self.action_mode == 'discrete':
+            # The agent sees 2 choices: 0 and 1
+            self.action_space = gym.spaces.Discrete(2)
+        else:
+            # The agent sees a continuous range: [-1.0, 1.0]
+            self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
         
         # Define observation space
         self.observation_space = gym.spaces.Box(low=np.array([-2.4, -np.inf, -0.418, -np.inf]),
@@ -38,7 +46,16 @@ class CustomCartPoleEnv(gym.Env):
         self.step_count = 0
 
     def step(self, action):
-        motor_speed = action
+        #motor_speed = action
+
+        if self.action_mode == 'discrete':
+            # Map 0 -> -1.0 (Full Left) and 1 -> 1.0 (Full Right)
+            # We use float() to ensure it's a number for the physics
+            motor_speed = float(action * 2.0 - 1.0)
+        else:
+            # For continuous, we extract the number from the array or use directly
+            motor_speed = float(action) if not isinstance(action, np.ndarray) else float(action.item())
+
         force = self.force_mag * motor_speed
         
         x, x_dot, theta, theta_dot = self.state
@@ -75,7 +92,7 @@ class CustomCartPoleEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.state = np.random.uniform(low=-0.05, high=0.05, size=(4,))
-        self.steps_beyond_done = None
+        #self.steps_beyond_done = None
         self.step_count = 0
         return np.array(self.state, dtype=np.float32), {}
 
@@ -139,7 +156,7 @@ class GymWrapper:
         next_state, reward, terminated, truncated, info = self.env.step(action)
         return self._filter_state(next_state), reward, terminated, truncated, info'''
 
-    def step(self, action):
+    '''def step(self, action):
     # 3. Handle Action Mapping
       if self.action_mode == 'discrete':
         # Map 0 -> -1.0 and 1 -> 1.0
@@ -156,6 +173,36 @@ class GymWrapper:
       # Call the original environment
       next_state, reward, terminated, truncated, info = self.env.step(act_for_env)
     
+      return self._filter_state(next_state), reward, terminated, truncated, info'''
+
+    def step(self, action):
+      # 1. HANDLE INPUT FROM AGENT
+      # Agents often return actions as numpy arrays or tensors; we need the raw value.
+      if isinstance(action, (np.ndarray, torch.Tensor)):
+          action_val = action.item()
+      else:
+          action_val = action
+
+      # 2. FORMAT FOR YOUR CUSTOM ENV
+      if self.action_mode == 'discrete':
+          # If your custom env expects 0 or 1:
+          act_for_env = int(action_val)
+      else:
+          # If your custom env expects a float between -1 and 1:
+          # This ensures it's a float32, which Gymnasium prefers for Box spaces
+          act_for_env = np.array([float(action_val)], dtype=np.float32)
+
+      # 3. EXECUTE STEP
+      try:
+          next_state, reward, terminated, truncated, info = self.env.step(act_for_env)
+      except AssertionError as e:
+          # Fallback: If your CustomEnv is strictly expecting a scalar in discrete mode
+          if self.action_mode == 'discrete':
+              next_state, reward, terminated, truncated, info = self.env.step(int(action_val))
+          else:
+              raise e
+
+      # 4. FILTER AND RETURN
       return self._filter_state(next_state), reward, terminated, truncated, info
 
       '''# If the agent sends 0, we translate to -1.0 (Left)
