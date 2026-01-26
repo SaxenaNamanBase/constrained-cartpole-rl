@@ -164,6 +164,7 @@ class QLearningControl(ControlAlgorithm):
     def __init__(self, control_params, exploration_strategy):
         super().__init__(control_params, exploration_strategy)
         self.q_table = {}
+        self.learning_rate = control_params['learning_rate']    ##########
         self.epsilon = control_params['epsilon']
         self.min_epsilon = control_params.get('min_epsilon', 0.01)
         self.decay_rate = control_params.get('decay_rate', 0.995)
@@ -194,7 +195,8 @@ class QLearningControl(ControlAlgorithm):
         current_q = self.q_table[state][action]
         max_next_q = np.max(self.q_table[next_state])
         
-        new_q = current_q + self.params['learning_rate'] * (reward + self.params['discount_factor'] * max_next_q - current_q)
+        #new_q = current_q + self.params['learning_rate'] * (reward + self.params['discount_factor'] * max_next_q - current_q)
+        new_q = current_q + self.learning_rate * (reward + self.params['discount_factor'] * max_next_q - current_q)
         self.q_table[state][action] = new_q
 
     def update_learning_rate(self, new_lr):
@@ -206,7 +208,28 @@ class QLearningControl(ControlAlgorithm):
         self.epsilon = max(self.min_epsilon, self.epsilon * self.decay_rate)
 
     def _discretize_state(self, state):
-        return tuple(np.round(x, 1) for x in state)
+        #return tuple(np.round(x, 1) for x in state)
+        num_bins = [6, 12, 12, 12] # Standard for 4D CartPole
+        state_bounds = [
+        [-2.4, 2.4],   # Cart Position
+        [-3.0, 3.0],   # Cart Velocity
+        [-0.418, 0.418], # Pole Angle (~24 degrees)
+        [-3.5, 3.5]    # Pole Velocity at tip
+        ]
+        if len(state) == 2:
+            active_bounds = state_bounds[2:]
+            active_bins = num_bins[2:]
+        else:
+            active_bounds = state_bounds
+            active_bins = num_bins
+        discretized = []
+        for i in range(len(state)):
+            # Scale the value into the bin index
+            # This maps the continuous value into a fixed integer between 0 and num_bins-1
+            bin_idx = np.digitize(state[i], np.linspace(active_bounds[i][0], active_bounds[i][1], active_bins[i] - 1))
+            discretized.append(int(bin_idx))
+            
+        return tuple(discretized)
 
 class SarsaControl(ControlAlgorithm):
     def __init__(self, control_params, exploration_strategy):

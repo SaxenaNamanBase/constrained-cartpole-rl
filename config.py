@@ -3,7 +3,7 @@ STOP_LOGIC = 'fixed' # Default
 STATE_DIM = 2
 
 # Simulation parameters
-NUM_EPISODES = 1000
+NUM_EPISODES = 2000
 NUM_EPISODES_DQN = 500
 NUM_EPISODES_SARSA=2000
 MAX_STEPS = 500
@@ -19,7 +19,7 @@ CONTROL_PARAMS = {
     'buffer_size': 10000,  # For DQN
     'batch_size': 64,      # For DQN
     'update_target_steps': 1000,  # For DQN
-    'patience': 50,          
+    'patience': 100,          
     'min_delta': 0.01,       
     'decay_factor': 0.9
 }

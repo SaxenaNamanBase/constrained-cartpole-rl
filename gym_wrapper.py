@@ -2,6 +2,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium.spaces import Box
 from gymnasium.envs.registration import register
+import torch
 
 # Register the custom environment
 register(
