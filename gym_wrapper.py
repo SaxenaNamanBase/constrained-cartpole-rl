@@ -12,12 +12,14 @@ register(
 )
 
 class CustomCartPoleEnv(gym.Env):
-    def __init__(self, action_mode='discrete'):
+    def __init__(self, action_mode='discrete', render_mode=None):
         super(CustomCartPoleEnv, self).__init__()
-        
+        self.render_mode = render_mode
         self.action_mode = action_mode
         # Define action space (continuous motor speed, e.g., from -1.0 to 1.0)
         #self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+
+        self.metadata = {"render_modes": ["rgb_array", "human"], "render_fps": 50}
 
         if self.action_mode == 'discrete':
             # The agent sees 2 choices: 0 and 1
@@ -98,8 +100,7 @@ class CustomCartPoleEnv(gym.Env):
         return np.array(self.state, dtype=np.float32), {}
 
     def render(self):
-        # Your render logic here
-        pass
+        return None
 
     def close(self):
         # Your close logic here

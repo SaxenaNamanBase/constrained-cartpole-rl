@@ -120,6 +120,11 @@ def cross_validation_qlearning(model_class, exploration_strategy_class, config, 
         print(f"Fold {fold + 1} Results: Average Reward: {avg_reward}, Success Rate: {success_rate * 100}%")
         print(f"Fold {fold + 1} was early stopped after {episodes_completed} episodes")
 
+        save_path = config.LOG_PARAMS['save_path']
+        os.makedirs(save_path, exist_ok=True)
+
+        model_file_path = os.path.join(save_path, 'sarsa_model.pkl')
+        joblib.dump(controller, model_file_path)
 
         # Save the best-performing model for this fold
         #best_logger.save_model(best_controller, f'best_fold_{fold + 1}')

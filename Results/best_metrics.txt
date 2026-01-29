@@ -1,3 +1,3 @@
-Average Reward (last 100 episodes): 23.37
+Average Reward (last 100 episodes): 21.9
 Success Rate (last 100 episodes): 0.0
-Average Episode Length (last 100 episodes): 24.37
+Average Episode Length (last 100 episodes): 22.9
