@@ -167,7 +167,12 @@ def train_dqn(model_class, exploration_strategy_class, config):
     #action_dim = env.env.action_space.n  # motor speed (continuous action)
 
     state_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.n
+    #action_dim = env.action_space.n
+    if isinstance(env.action_space, gym.spaces.Discrete):
+        action_dim = env.action_space.n
+    else:
+        # For Continuous (Box) spaces, we need the number of output nodes
+        action_dim = env.action_space.shape[0]
 
     # Initialize DQN controller
     controller = model_class(config.CONTROL_PARAMS, exploration_strategy_class(config.CONTROL_PARAMS['epsilon']), state_dim, action_dim)
