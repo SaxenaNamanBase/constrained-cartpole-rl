@@ -275,9 +275,8 @@ def train_dqn(model_class, exploration_strategy_class, config):
 
     return controller
 
-def train_dqn_until_overfitting(model_class, exploration_strategy_class, config, max_episodes=5000):
-    '''env = GymWrapper(gym.make('CartPole-v1'))
-    eval_env = GymWrapper(gym.make('CartPole-v1'))'''
+'''def train_dqn_until_overfitting(model_class, exploration_strategy_class, config, max_episodes=5000):
+    
     
     env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
                  mode=config.STATE_MODE, 
@@ -374,6 +373,103 @@ def train_dqn_until_overfitting(model_class, exploration_strategy_class, config,
     logger.save_logs_as_csv(state='train')
     logger.save_metrics(state='train')
 
+    return controller'''
+
+def train_dqn_until_overfitting(model_class, exploration_strategy_class, config, max_episodes=1000, stop_logic='overfitting'):
+    env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
+                     mode=config.STATE_MODE, 
+                     action_mode=config.ACTION_MODE)
+    eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
+                          mode=config.STATE_MODE, 
+                          action_mode=config.ACTION_MODE)
+    
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n if config.ACTION_MODE == 'discrete' else 1
+    
+    controller = model_class(config.CONTROL_PARAMS, 
+                             exploration_strategy_class(config.CONTROL_PARAMS['epsilon']), 
+                             state_dim, action_dim)
+    logger = DataLogger(config.LOG_PARAMS)
+
+    # 2. Tracking Variables
+    training_rewards = []
+    evaluation_rewards = []
+    eval_window = []
+    
+    best_window_avg = -np.inf
+    save_path = config.LOG_PARAMS['save_path']
+    os.makedirs(save_path, exist_ok=True)
+
+    print(f"Starting Training | Mode: {stop_logic} | Max Episodes: {max_episodes}")
+
+    # 3. Training Loop
+    for episode in range(max_episodes):
+        state, _ = env.reset()
+        episode_reward = 0
+        done = False
+        t = 0
+        
+        while not done:
+            action = controller.get_action(state)
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+            
+            controller.update(state, action, reward, next_state, done)
+            state = next_state
+            episode_reward += reward
+            t += 1
+
+        controller.decay_epsilon()
+        training_rewards.append(episode_reward)
+        logger.log_episode(episode, episode_reward, t)
+
+        # 4. Periodic Evaluation (Every 10 Episodes)
+        if (episode + 1) % 10 == 0:
+            eval_reward = evaluate_agent(controller, eval_env)
+            evaluation_rewards.append(eval_reward)
+            eval_window.append(eval_reward)
+            
+            if len(eval_window) > 5:  # Keep a sliding window of 5 evaluations
+                eval_window.pop(0)
+            
+            current_window_avg = np.mean(eval_window)
+            logger.log_rewards(episode + 1, episode_reward, eval_reward)
+
+            # --- BEST MODEL CHECKPOINTING ---
+            # Scientifically safer than just saving the "last" model
+            if current_window_avg > best_window_avg:
+                best_window_avg = current_window_avg
+                checkpoint = {
+                    'model': controller,
+                    'episode': episode + 1,
+                    'avg_reward': current_window_avg,
+                    'config': config.CONTROL_PARAMS
+                }
+                joblib.dump(checkpoint, os.path.join(save_path, 'best_dqn_model.pkl'))
+                print(f"⭐ New Best Model Saved (Avg: {current_window_avg:.2f})")
+
+            # --- STOP LOGIC: OVERFITTING / DIVERGENCE ---
+            if stop_logic == 'overfitting':
+                # Rule 1: Must have a "Best" baseline (at least 100 reward)
+                # Rule 2: Must drop 30% below that baseline to trigger stop
+                if best_window_avg > 100 and current_window_avg < (best_window_avg * 0.5):
+                    print(f"🛑 Overfitting/Divergence detected at episode {episode + 1}.")
+                    print(f"Current Avg {current_window_avg:.2f} is < 70% of Best {best_window_avg:.2f}")
+                    break
+
+            print(f"Episode {episode + 1} | Train: {episode_reward} | Eval Avg: {current_window_avg:.2f}")
+
+    # 5. Final Logging & Cleanup
+    print("Training Process Finalized.")
+    env.close()
+
+    # Save final model info
+    model_info = {'model': controller, 'hyperparameters': config.CONTROL_PARAMS}
+    joblib.dump(model_info, os.path.join(save_path, 'final_dqn_model.pkl'))
+    
+    plot_rewards(training_rewards, evaluation_rewards, 10, save_path=save_path)
+    logger.save_logs_as_csv(state='train')
+    
     return controller
 
 
