@@ -205,23 +205,32 @@ def tune_hyperparameters_dqn(model_class, exploration_strategy_class, cfg):
         # --- EVALUATION PHASE ---
         # Evaluate without exploration to get the "true" performance
         eval_scores = []
+        
+        # Store the original epsilon so we can restore it after evaluation
+        original_epsilon = controller.exploration_strategy.epsilon
+        
         for _ in range(3): 
-            # We use an evaluation function (ensure evaluate_agent is imported/defined)
             state, _ = eval_env.reset()
             total_reward = 0
             done = False
+            
+            # Manually force greedy by setting epsilon to 0 temporarily
+            controller.exploration_strategy.epsilon = 0.0
+            
             while not done:
-                # Use a greedy action (epsilon=0) for evaluation
-                action = controller.get_action(state, force_greedy=True) 
+                action = controller.get_action(state) # Now it's greedy because epsilon=0
                 state, reward, term, trunc, _ = eval_env.step(action)
                 total_reward += reward
                 done = term or trunc
             eval_scores.append(total_reward)
         
+        # Restore the epsilon for the next potential training step
+        controller.exploration_strategy.epsilon = original_epsilon
+        
         avg_eval_score = np.mean(eval_scores)
         print(f"Testing: LR={params['learning_rate']:.4f} | Result: {avg_eval_score:.1f}")
         
-        return -avg_eval_score # Negative because we minimize
+        return -avg_eval_score
 
     # 2. Run Optimization
     result = gp_minimize(objective, space, n_calls=15, random_state=42)
