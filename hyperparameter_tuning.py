@@ -161,12 +161,19 @@ def tune_hyperparameters_qlearning(model_class, exploration_strategy_class, conf
 
 def tune_hyperparameters_dqn(model_class, exploration_strategy_class, cfg):
     # 1. Define Search Space
-    space = [
+    '''space = [
         Real(1e-4, 1e-2, name='learning_rate', prior='log-uniform'),
         Real(0.95, 0.999, name='discount_factor'),
         Integer(32, 256, name='batch_size'),
         Real(0.01, 0.1, name='epsilon'), 
-        Integer(5000, 50000, name='buffer_size'),
+        Integer(10000, 20000, name='buffer_size'),
+    ]'''
+    space = [
+        Real(1e-4, 5e-3, name='learning_rate', prior='log-uniform'), # Tightened for 2D stability
+        Real(0.98, 0.999, name='discount_factor'), # Higher gamma is better for 2D
+        Integer(32, 128, name='batch_size'), # 256 is often too heavy for simple CartPole
+        Real(0.99, 0.999, name='decay_rate'), # TUNE THIS instead of starting epsilon
+        Integer(10000, 30000, name='buffer_size'),
     ]
 
     @use_named_args(space)
@@ -187,9 +194,13 @@ def tune_hyperparameters_dqn(model_class, exploration_strategy_class, cfg):
         
         state_dim = env.observation_space.shape[0]
         action_dim = env.action_space.n if act_mode == 'discrete' else 1
+
+        cfg.CONTROL_PARAMS['epsilon'] = 1.0 
+        cfg.CONTROL_PARAMS['decay_rate'] = params['decay_rate']
         
         # Initialize Controller
-        exploration_strategy = exploration_strategy_class(epsilon=params['epsilon'])
+        #exploration_strategy = exploration_strategy_class(epsilon=params['epsilon'])
+        exploration_strategy = exploration_strategy_class(epsilon=1.0)
         controller = model_class(cfg.CONTROL_PARAMS, exploration_strategy, state_dim, action_dim)
         
         # --- TRAINING PHASE (Shortened for speed) ---
@@ -212,7 +223,7 @@ def tune_hyperparameters_dqn(model_class, exploration_strategy_class, cfg):
         # Store the original epsilon so we can restore it after evaluation
         original_epsilon = controller.exploration_strategy.epsilon
         
-        for _ in range(3): 
+        for _ in range(10): 
             state, _ = eval_env.reset()
             total_reward = 0
             done = False
@@ -242,7 +253,7 @@ def tune_hyperparameters_dqn(model_class, exploration_strategy_class, cfg):
         return -avg_eval_score
 
     # 2. Run Optimization
-    result = gp_minimize(objective, space, n_calls=15, random_state=42)
+    result = gp_minimize(objective, space, n_calls=25, random_state=42)
 
     # 3. Update cfg with best params
     best_params = {param.name: val for param, val in zip(space, result.x)}
