@@ -131,6 +131,7 @@ class DQNControl(ControlAlgorithm):
         # Calculate the current Q values
         current_q_values = self.q_network(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
+
         # Calculate the next Q values using the target network
         with torch.no_grad():
             next_q_values = self.target_network(next_states).max(1)[0]
@@ -140,6 +141,9 @@ class DQNControl(ControlAlgorithm):
 
         # Compute loss
         loss = self.criterion(current_q_values, target_q_values)
+
+        self.last_loss = loss.item()            ##############################
+        self.avg_q = current_q_values.mean().item()          ###########################
 
         # Perform gradient descent
         self.optimizer.zero_grad()

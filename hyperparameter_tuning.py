@@ -5,6 +5,9 @@ from skopt.utils import use_named_args
 import gymnasium as gym
 import config
 import numpy as np
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning, module="gymnasium.spaces.box")
 
 def tune_hyperparameters_qlearning(model_class, exploration_strategy_class, config):
     # Define the hyperparameter search space
@@ -190,7 +193,7 @@ def tune_hyperparameters_dqn(model_class, exploration_strategy_class, cfg):
         controller = model_class(cfg.CONTROL_PARAMS, exploration_strategy, state_dim, action_dim)
         
         # --- TRAINING PHASE (Shortened for speed) ---
-        tuning_episodes = 100 # Reduced for faster optimization
+        tuning_episodes = 500 # Reduced for faster optimization
         for episode in range(tuning_episodes):
             state, _ = env.reset()
             done = False
@@ -228,7 +231,13 @@ def tune_hyperparameters_dqn(model_class, exploration_strategy_class, cfg):
         controller.exploration_strategy.epsilon = original_epsilon
         
         avg_eval_score = np.mean(eval_scores)
-        print(f"Testing: LR={params['learning_rate']:.4f} | Result: {avg_eval_score:.1f}")
+        #print(f"Testing: LR={params['learning_rate']:.4f} | Result: {avg_eval_score:.1f}")
+        print(f"Trial Result: {avg_eval_score:.1f} | "
+              f"LR: {params['learning_rate']:.5f}, "
+              f"Gamma: {params['discount_factor']:.3f}, "
+              f"Batch: {params['batch_size']}, "
+              f"Eps: {params['epsilon']:.2f}, "
+              f"Buf: {params['buffer_size']}")
         
         return -avg_eval_score
 

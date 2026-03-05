@@ -155,6 +155,9 @@ def train_dqn(model_class, exploration_strategy_class, config):
     '''env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))  # Use your custom CartPole env
     eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))  # Same for evaluation'''
 
+    save_path = config.LOG_PARAMS['save_path']
+    os.makedirs(save_path, exist_ok=True)
+    
     env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
                  mode=config.STATE_MODE, 
                  action_mode=config.ACTION_MODE)
@@ -186,6 +189,8 @@ def train_dqn(model_class, exploration_strategy_class, config):
     recent_rewards = []
     training_rewards = []  # Track training rewards
     evaluation_rewards = []  # Track evaluation rewards
+    q_values_history = []
+    best_eval_reward = -np.inf
 
     for episode in range(config.NUM_EPISODES):
         state, _ = env.reset()
@@ -234,9 +239,30 @@ def train_dqn(model_class, exploration_strategy_class, config):
         if (episode + 1) % 10 == 0:
             eval_reward = evaluate_agent(controller, eval_env)  # Evaluate the model
             evaluation_rewards.append(eval_reward)
+            if eval_reward >= best_eval_reward:
+                best_eval_reward = eval_reward
+                
+                # Create the same dictionary you use at the end
+                best_model_info = {
+                    'model': controller,
+                    'hyperparameters': config.CONTROL_PARAMS,
+                    'episode': episode
+                }
+                
+                # Save using your original joblib style
+                joblib.dump(best_model_info, os.path.join(save_path, 'best_dqn_model.pkl'))
+                print(f"✨ New best evaluation reward: {eval_reward:.2f}. Model saved!")
             print(f"Episode {episode + 1}/{config.NUM_EPISODES} - Training Reward: {episode_reward:.2f} - Epsilon: {controller.epsilon:.4f} - Avg Reward: {avg_reward:.2f} - Evaluation Reward: {eval_reward:.2f}")
 
             logger.log_rewards(episode + 1, episode_reward, eval_reward)
+
+        if episode % 50 == 0:
+            # Check if the controller has the logging attributes
+            loss_val = getattr(controller, 'last_loss', 0)
+            q_val = getattr(controller, 'avg_q', 0)
+            q_values_history.append(q_val)
+            
+            print(f"[{episode}] Reward: {episode_reward} | Loss: {loss_val:.4f} | Avg Q: {q_val:.2f}")
 
         # Learning rate update if performance drops
         current_lr = controller.optimizer.param_groups[0]['lr']
@@ -265,8 +291,8 @@ def train_dqn(model_class, exploration_strategy_class, config):
 
     # Save model and hyperparameters
     eval_interval = 10  # Example interval for evaluation
-    save_path = config.LOG_PARAMS['save_path']
-    os.makedirs(save_path, exist_ok=True)
+    #save_path = config.LOG_PARAMS['save_path']
+    #os.makedirs(save_path, exist_ok=True)
     plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path=save_path)
     joblib.dump(model_info, os.path.join(save_path, 'trained_dqn_model_with_params.pkl'))
 
