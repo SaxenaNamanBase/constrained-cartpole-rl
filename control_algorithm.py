@@ -168,7 +168,7 @@ class QLearningControl(ControlAlgorithm):
     def __init__(self, control_params, exploration_strategy):
         super().__init__(control_params, exploration_strategy)
         self.q_table = {}
-        self.learning_rate = control_params['learning_rate']    ##########
+        self.learning_rate = control_params['learning_rate_qlearning']    ##########
         self.epsilon = control_params['epsilon']
         self.min_epsilon = control_params.get('min_epsilon', 0.01)
         self.decay_rate = control_params.get('decay_rate', 0.995)
@@ -213,7 +213,8 @@ class QLearningControl(ControlAlgorithm):
 
     def _discretize_state(self, state):
         #return tuple(np.round(x, 1) for x in state)
-        num_bins = [6, 12, 12, 12] # Standard for 4D CartPole
+        ##num_bins = [6, 12, 12, 12]
+        num_bins = [12, 12, 12, 12]
         state_bounds = [
         [-2.4, 2.4],   # Cart Position
         [-3.0, 3.0],   # Cart Velocity
@@ -253,21 +254,6 @@ class SarsaControl(ControlAlgorithm):
             'theta_dot': np.linspace(-2.0, 2.0, 10)  # Pole angular velocity
         }
         return bins
-
-    '''def _discretize_state(self, state):
-        #x, x_dot, theta, theta_dot = state
-        theta, theta_dot = state
-        state_discrete = (
-            np.digitize(x, self.state_bins['x']) - 1,
-            np.digitize(x_dot, self.state_bins['x_dot']) - 1,
-            np.digitize(theta, self.state_bins['theta']) - 1,
-            np.digitize(theta_dot, self.state_bins['theta_dot']) - 1
-        )
-        state_discrete = (
-            np.digitize(theta, self.state_bins['theta']) - 1,
-            np.digitize(theta_dot, self.state_bins['theta_dot']) - 1
-        )
-        return state_discrete'''
 
     def _discretize_state(self, state):
     # Detect if we are looking at 2D or 4D

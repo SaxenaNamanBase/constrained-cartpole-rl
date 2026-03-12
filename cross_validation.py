@@ -9,41 +9,45 @@ from gym_wrapper import GymWrapper
 from data_logger import DataLogger
 from exploration_strategies import EpsilonGreedyStrategy
 import os
+import datetime
+
+def create_session_folder(algorithm_name, config):
+    """Creates a unique directory for the current training session."""
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    folder_name = f"{algorithm_name}_{config.STATE_MODE}_{timestamp}"
+    
+    # Ensure the base Results directory exists
+    base_path = config.LOG_PARAMS['save_path']
+    session_dir = os.path.join(base_path, folder_name)
+    
+    os.makedirs(session_dir, exist_ok=True)
+    return session_dir
 
 def performance_based_lr_update(episode, recent_rewards, control_params, current_lr):
     patience = control_params['patience']
     min_delta = control_params['min_delta']
     decay_factor = control_params['decay_factor']
-    min_lr = control_params.get('min_lr', 1e-4)  # Set a minimum learning rate, defaulting to 1e-4
+    min_lr = control_params.get('min_lr', 1e-4)
     
     if len(recent_rewards) >= patience:
         avg_reward_recent = np.mean(recent_rewards[-patience:])
-
-        #avg_reward_past = np.mean(recent_rewards[:-patience])
-
         past_rewards = recent_rewards[:-patience]
-        if len(past_rewards) == 0:
-            return current_lr # Or use a default value for avg_reward_past
+        if len(past_rewards) == 0: return current_lr
 
         avg_reward_past = np.mean(past_rewards)
-        
-
         if avg_reward_recent < avg_reward_past + min_delta:
-            new_lr = max(current_lr * decay_factor, min_lr)
-            #print(f"Performance plateau detected at episode {episode + 1}. Reducing learning rate to {new_lr}")
-            return new_lr
-
+            return max(current_lr * decay_factor, min_lr)
     return current_lr
 
-def cross_validation_qlearning(model_class, exploration_strategy_class, config, k_folds=5):
+'''def cross_validation_qlearning(model_class, exploration_strategy_class, config, session_dir, k_folds=5):
     best_avg_reward = -np.inf
     best_controller = None
     best_logger = None
     best_learning_rate = None
     for fold in range(k_folds):
-        initial_lr = config.CONTROL_PARAMS['learning_rate']  # Get the initial learning rate
-        current_lr = initial_lr
-        print(f"Fold {fold + 1}/{k_folds}: Training on {config.NUM_EPISODES} episodes")
+        current_lr = config.CONTROL_PARAMS['learning_rate_qlearning']  # Get the initial learning rate
+        #current_lr = initial_lr
+        print(f"Fold {fold + 1}/{k_folds}: Training on {config.NUM_EPISODES} episodes | Session: {os.path.basename(session_dir)} ---")
         print(f"Initial Learning Rate for Fold {fold + 1}: {initial_lr}")
 
         # Reset environment and logger for each fold
@@ -54,60 +58,57 @@ def cross_validation_qlearning(model_class, exploration_strategy_class, config, 
                  action_mode=config.ACTION_MODE)
         exploration_strategy = exploration_strategy_class(epsilon=config.CONTROL_PARAMS['epsilon'])
         controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
-        logger = DataLogger(config.LOG_PARAMS)
+        logger = DataLogger(config.LOG_PARAMS, session_dir=session_dir)
 
-        patience_counter = 0
-        best_fold_reward = -np.inf
-        episodes_completed = 0  # Track the number of episodes completed in this fold
+        #patience_counter = 0
+        #best_fold_reward = -np.inf
+        #episodes_completed = 0  # Track the number of episodes completed in this fold
         recent_rewards = []  # Track recent rewards for learning rate adjustment
 
         # Training loop for the fold
         for episode in range(config.NUM_EPISODES):
             state, _ = env.reset()
             episode_reward = 0
-            episodes_completed += 1  # Increment the episode counter
-
             for t in range(config.MAX_STEPS):
                 action = controller.get_action(state)
-                #next_state, reward, done, _ = env.step(action)
-                next_state, reward, terminated, truncated, info = env.step(action)
+                next_state, reward, terminated, truncated, _ = env.step(action)
                 done = terminated or truncated
                 controller.update(state, action, reward, next_state, done)
-                logger.log(state, action, reward, next_state)
-
                 state = next_state
                 episode_reward += reward
-                if done:
-                    break
+                if done: break
 
             # Log the episode data
-            logger.log_episode(episode, episode_reward, t + 1)
+            logger.log_episode(episode, episode_reward, t + 1, controller.epsilon)
             recent_rewards.append(episode_reward)
 
-            #controller.decay_epsilon()
+            controller.decay_epsilon()
 
             # Adjust the learning rate based on performance
             new_lr = performance_based_lr_update(episode, recent_rewards, config.CONTROL_PARAMS, current_lr)
-            if new_lr != current_lr:  # Update only if there's a change
+            if new_lr != current_lr: 
                 controller.update_learning_rate(new_lr)
                 current_lr = new_lr
 
             # Track the best single episode reward for this fold
-            if episode_reward > best_fold_reward:
-                best_fold_reward = episode_reward
+            #if episode_reward > best_fold_reward:
+                #best_fold_reward = episode_reward
                 #best_controller = controller  # Track the best controller within this fold
                 #best_logger = logger
                 #best_learning_rate = current_lr  # Track the best learning rate within this fold
 
             # Early stopping logic
-            '''if episode_reward > best_fold_reward + config.EARLY_STOPPING['min_delta']:
+            if episode_reward > best_fold_reward + config.EARLY_STOPPING['min_delta']:
                 patience_counter = 0
             else:
                 patience_counter += 1
 
             if patience_counter >= config.EARLY_STOPPING['patience']:
                 print(f"Early stopping in fold {fold + 1} at episode {episode + 1} with best reward {best_fold_reward}")
-                break'''
+                break
+
+        avg_reward = logger.get_average_reward()
+        print(f"Fold {fold+1} Finished. Avg Reward: {avg_reward:.2f} | Final Epsilon: {controller.epsilon:.3f}")
 
         # Print the final learning rate for this fold
         print(f"Final Learning Rate for Fold {fold + 1}: {current_lr}")
@@ -123,7 +124,7 @@ def cross_validation_qlearning(model_class, exploration_strategy_class, config, 
         save_path = config.LOG_PARAMS['save_path']
         os.makedirs(save_path, exist_ok=True)
 
-        model_file_path = os.path.join(save_path, 'sarsa_model.pkl')
+        model_file_path = os.path.join(save_path, 'qlearning_model.pkl')
         joblib.dump(controller, model_file_path)
 
         # Save the best-performing model for this fold
@@ -148,12 +149,68 @@ def cross_validation_qlearning(model_class, exploration_strategy_class, config, 
 
     print("Cross-Validation Complete.")
     print(f"Best Average Reward across all folds: {best_avg_reward}")
-    return best_avg_reward, controller
+    return best_avg_reward, controller'''
 
-def train_dqn(model_class, exploration_strategy_class, config):
+def cross_validation_qlearning(model_class, exploration_strategy_class, config, session_dir, k_folds=5):
+    best_avg_reward = -np.inf
+    best_controller = None
+    best_fold_rewards = []
+    
+    for fold in range(k_folds):
+        current_lr = config.CONTROL_PARAMS['learning_rate_qlearning']
+        print(f"\n--- Fold {fold + 1}/{k_folds} | Session: {os.path.basename(session_dir)} ---")
+
+        env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
+                         mode=config.STATE_MODE, 
+                         action_mode=config.ACTION_MODE)
+        
+        exploration_strategy = exploration_strategy_class(epsilon=config.CONTROL_PARAMS['epsilon'])
+        controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
+        # Pass session_dir to DataLogger
+        logger = DataLogger(config.LOG_PARAMS, session_dir=session_dir)
+        fold_rewards = [] 
+
+        recent_rewards = []
+        for episode in range(config.NUM_EPISODES):
+            state, _ = env.reset()
+            episode_reward = 0
+            for t in range(config.MAX_STEPS):
+                action = controller.get_action(state)
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                done = terminated or truncated
+                controller.update(state, action, reward, next_state, done)
+                state = next_state
+                episode_reward += reward
+                if done: break
+
+            logger.log_episode(episode, episode_reward, t + 1, controller.epsilon)
+            recent_rewards.append(episode_reward)
+            controller.decay_epsilon()
+
+            # LR Update
+            new_lr = performance_based_lr_update(episode, recent_rewards, config.CONTROL_PARAMS, current_lr)
+            if new_lr != current_lr:
+                controller.update_learning_rate(new_lr)
+                current_lr = new_lr
+
+        logger.save_to_csv(fold_name=f"fold_{fold+1}")
+
+        avg_reward = logger.get_average_reward()
+        print(f"Fold {fold+1} Finished. Avg Reward: {avg_reward:.2f} | Final Epsilon: {controller.epsilon:.3f}")
+
+        if avg_reward > best_avg_reward:
+            best_avg_reward = avg_reward
+            best_controller = controller
+            # Save the best model of the CV into the session folder
+            joblib.dump({'model': best_controller, 'config': config.CONTROL_PARAMS}, 
+                        os.path.join(session_dir, 'qlearning_best_model.pkl'))
+
+    plot_rewards_from_csv(session_dir, fold_name="fold_1")
+    env.close()
+    return best_avg_reward, best_controller
+
+'''def train_dqn(model_class, exploration_strategy_class, config):
     # Load your custom environment
-    '''env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))  # Use your custom CartPole env
-    eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))  # Same for evaluation'''
 
     save_path = config.LOG_PARAMS['save_path']
     os.makedirs(save_path, exist_ok=True)
@@ -200,7 +257,6 @@ def train_dqn(model_class, exploration_strategy_class, config):
 
         while not done:
             action = controller.get_action(state)  # Get continuous action (motor speed)
-            '''next_state, reward, done, _ = env.step(action)'''  #########
             next_state, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
 
@@ -299,107 +355,55 @@ def train_dqn(model_class, exploration_strategy_class, config):
     logger.save_logs_as_csv(state='train')
     logger.save_metrics(state='train')
 
-    return controller
+    return controller'''
 
-'''def train_dqn_until_overfitting(model_class, exploration_strategy_class, config, max_episodes=5000):
-    
-    
+def train_dqn(model_class, exploration_strategy_class, config, session_dir):
     env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
-                 mode=config.STATE_MODE, 
-                 action_mode=config.ACTION_MODE)
+                     mode=config.STATE_MODE, action_mode=config.ACTION_MODE)
     eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
-                      mode=config.STATE_MODE, 
-                      action_mode=config.ACTION_MODE)
+                          mode=config.STATE_MODE, action_mode=config.ACTION_MODE)
+
     state_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.n if config.ACTION_MODE == 'discrete' else 1
+    action_dim = env.action_space.n if isinstance(env.action_space, gym.spaces.Discrete) else env.action_space.shape[0]
+
     controller = model_class(config.CONTROL_PARAMS, exploration_strategy_class(config.CONTROL_PARAMS['epsilon']), state_dim, action_dim)
-    logger = DataLogger(config.LOG_PARAMS)
+    logger = DataLogger(config.LOG_PARAMS, session_dir=session_dir)
 
-    patience = 50  # Number of episodes to wait before considering early stopping
-    min_delta = 1.0  # Minimum change to qualify as an improvement
-    best_avg_reward = -np.inf
-    patience_counter = 0
-    recent_rewards = []
-    training_rewards = []  # List to store training rewards
-    evaluation_rewards = []  # List to store evaluation rewards
+    best_eval_reward = -np.inf
+    training_rewards = []
+    evaluation_rewards = []
 
-    for episode in range(max_episodes):
+    for episode in range(config.NUM_EPISODES_DQN):
         state, _ = env.reset()
         episode_reward = 0
         done = False
         t = 0
         while not done:
             action = controller.get_action(state)
-            next_state, reward, terminated, truncated, info = env.step(action)
+            next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
             controller.update(state, action, reward, next_state, done)
             state = next_state
             episode_reward += reward
             t += 1
 
-        # Decay epsilon after the episode
         controller.decay_epsilon()
-
-        logger.log_episode(episode, episode_reward, t + 1)
         training_rewards.append(episode_reward)
 
-        recent_rewards.append(episode_reward)
-        if len(recent_rewards) > patience:
-            recent_rewards.pop(0)
-
-        # Calculate average reward over the last `patience` episodes
-        avg_reward = np.mean(recent_rewards)
-
-        # Check for improvement
-        if avg_reward > best_avg_reward + min_delta:
-            best_avg_reward = avg_reward
-            patience_counter = 0  # Reset the patience counter if there's an improvement
-        else:
-            patience_counter += 1  # Increment the patience counter if no improvement
-
-        # Evaluate the model periodically
         if (episode + 1) % 10 == 0:
             eval_reward = evaluate_agent(controller, eval_env)
             evaluation_rewards.append(eval_reward)
-            print(f"Episode {episode + 1} - Training Reward: {episode_reward:.2f} - Avg Reward: {avg_reward:.2f} - Evaluation Reward: {eval_reward:.2f}")
+            if eval_reward >= best_eval_reward:
+                best_eval_reward = eval_reward
+                joblib.dump({'model': controller, 'episode': episode}, os.path.join(session_dir, 'dqn_best_model.pkl'))
+            
+            print(f"Ep {episode+1}/{config.NUM_EPISODES_DQN} | Train: {episode_reward:.1f} | Eval: {eval_reward:.1f} | Eps: {controller.epsilon:.3f}")
 
-            logger.log_rewards(episode + 1, episode_reward, eval_reward)
-
-            # Check for overfitting
-            if len(evaluation_rewards) > patience and evaluation_rewards[-1] < np.max(evaluation_rewards[:-patience]):
-                print(f"Overfitting detected at episode {episode + 1}. Stopping training.")
-                break
-
-    print("DQN Training Complete.")
+    # Final Save
+    joblib.dump({'model': controller, 'config': config.CONTROL_PARAMS}, os.path.join(session_dir, 'dqn_final_model.pkl'))
+    plot_rewards(training_rewards, evaluation_rewards, 10, save_path=session_dir)
     env.close()
-
-    # Log the model along with its hyperparameters
-    model_info = {
-        'model': controller,
-        'hyperparameters': {
-            'learning_rate': config.CONTROL_PARAMS['learning_rate'],
-            'discount_factor': config.CONTROL_PARAMS['discount_factor'],
-            'epsilon': config.CONTROL_PARAMS['epsilon'],
-            'min_epsilon': config.CONTROL_PARAMS.get('min_epsilon', 0.01),
-            'decay_rate': config.CONTROL_PARAMS.get('decay_rate', 0.995),
-            'buffer_size': config.CONTROL_PARAMS.get('buffer_size', 10000),
-            'batch_size': config.CONTROL_PARAMS.get('batch_size', 64),
-            'update_target_steps': config.CONTROL_PARAMS.get('update_target_steps', 1000),
-            'optimizer': config.CONTROL_PARAMS.get('optimizer_name', 'Adam')  # Log the optimizer name
-        }
-    }
-
-    # Save the model and hyperparameters together
-    eval_interval = 10  # Example value, adjust based on your needs
-    save_path = config.LOG_PARAMS['save_path']
-    os.makedirs(save_path, exist_ok=True)
-    plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path=save_path)
-    joblib.dump(model_info, os.path.join(save_path, 'trained_dqn_model_with_params.pkl'))
-
-    logger.save_logs_as_csv(state='train')
-    logger.save_metrics(state='train')
-
-    return controller'''
+    return controller
 
 def train_dqn_until_overfitting(model_class, exploration_strategy_class, config, max_episodes=1000, stop_logic='overfitting'):
     env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
@@ -581,7 +585,7 @@ def evaluate_agent(controller, eval_env, num_episodes=10):
     avg_eval_reward = total_reward / num_episodes
     return avg_eval_reward
 
-def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path=None):
+'''def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path=None):
     # Debugging prints
     print(f"Training Rewards: {training_rewards}")
     print(f"Evaluation Rewards: {evaluation_rewards}")
@@ -607,28 +611,22 @@ def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path=
     if save_path:
         plot_path = os.path.join(save_path, 'training_plot_dqn.png')
         plt.savefig(plot_path)
-    plt.show()
+    plt.show()'''
 
-'''def run_cross_validation_or_training(algorithm='qlearning'):
-    if algorithm == 'qlearning':
-        best_reward, controller = cross_validation_qlearning(QLearningControl, EpsilonGreedyStrategy, config)
-        print(f"Best Average Reward from Q-Learning Cross-Validation: {best_reward}")
-        if controller is None:
-           print("Empty")
-        return controller  # or return best_reward if you want
-    elif algorithm == 'dqn':
-        #controller = train_dqn_until_overfitting(DQNControl, EpsilonGreedyStrategy, config, max_episodes=5000)
-        controller = train_dqn(DQNControl, EpsilonGreedyStrategy, config)
-        print(f"DQN Training completed. You can now test the agent.")
-        return controller
-    elif algorithm == 'sarsa':
-        controller = train_sarsa(SarsaControl, EpsilonGreedyStrategy, config)
-        print(f"SARSA Training completed. You can now test the agent.")
-        return controller
-    else:
-        raise ValueError("Unknown algorithm specified. Use 'qlearning' or 'dqn'.")'''
+def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path):
+    plt.figure(figsize=(12, 6))
+    plt.plot(training_rewards, label='Training Reward', alpha=0.6)
+    if evaluation_rewards:
+        eval_episodes = list(range(eval_interval, (len(evaluation_rewards)*eval_interval) + 1, eval_interval))
+        plt.plot(eval_episodes, evaluation_rewards, label='Evaluation Reward', color='red', linewidth=2)
+    plt.title('Training Performance')
+    plt.xlabel('Episode')
+    plt.ylabel('Reward')
+    plt.legend()
+    plt.savefig(os.path.join(save_path, 'learning_curve.png'))
+    plt.close()
   
-def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
+'''def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
     # 1. Update global config variables based on dropdown choices
     config.STATE_MODE = mode
     config.STOP_LOGIC = stop_logic
@@ -664,7 +662,27 @@ def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
         return controller
 
     else:
-        raise ValueError(f"Unknown algorithm: {algorithm}")
+        raise ValueError(f"Unknown algorithm: {algorithm}")'''
+
+def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
+    config.STATE_MODE = mode
+    config.STOP_LOGIC = stop_logic
+    config.ACTION_MODE = action_mode
+    config.STATE_DIM = 2 if mode == '2D' else 4
+
+    # Create the session directory here
+    session_dir = create_session_folder(algorithm_name=algorithm, config=config)
+    print(f"\n🚀 Starting {algorithm.upper()} | Mode: {mode} | Folder: {session_dir}")
+
+    if algorithm == 'qlearning':
+        best_reward, controller = cross_validation_qlearning(QLearningControl, EpsilonGreedyStrategy, config, session_dir)
+    elif algorithm == 'dqn':
+        controller = train_dqn(DQNControl, EpsilonGreedyStrategy, config, session_dir)
+    elif algorithm == 'sarsa':
+        # You would update train_sarsa similarly to accept session_dir
+        controller = train_sarsa(SarsaControl, EpsilonGreedyStrategy, config, session_dir)
+    
+    return controller
 
 
 def plot_sarsa_training(logger, config, save_path=None):

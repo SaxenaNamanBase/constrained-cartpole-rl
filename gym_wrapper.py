@@ -108,11 +108,6 @@ class CustomCartPoleEnv(gym.Env):
 
 # The wrapper class
 class GymWrapper:
-    '''def __init__(self, env, mode='2D'):
-        self.env = env
-        self.mode = mode
-        self.observation_space = self._filter_state(self.env.observation_space.sample()).shape
-        self.action_space = self.env.action_space'''
 
     def __init__(self, env, mode='2D', action_mode='discrete'):
         self.env = env
@@ -145,37 +140,10 @@ class GymWrapper:
             return np.array(state[2:4], dtype=np.float32)  # Keep only the pole angle and angular velocity
         return np.array(state, dtype=np.float32)
 
-    '''def reset(self):
-        state, info = self.env.reset()
-        return self._filter_state(state), info'''
-
     def reset(self, seed=None, options=None):
         # Unpack the Gymnasium 0.26+ reset tuple
         state, info = self.env.reset(seed=seed, options=options)
         return self._filter_state(state), info
-
-    '''def step(self, action):
-        next_state, reward, terminated, truncated, info = self.env.step(action)
-        return self._filter_state(next_state), reward, terminated, truncated, info'''
-
-    '''def step(self, action):
-    # 3. Handle Action Mapping
-      if self.action_mode == 'discrete':
-        # Map 0 -> -1.0 and 1 -> 1.0
-        # We handle it safely regardless of if action is int or array([int])
-        val = int(action) if not isinstance(action, np.ndarray) else int(action.item())
-        continuous_speed = float(val * 2.0 - 1.0)
-      else:
-        # For continuous, just ensure it's a float
-        continuous_speed = float(action)  
-
-      # Wrap in a numpy array as expected by the Box action space
-      act_for_env = np.array([continuous_speed], dtype=np.float32)
-
-      # Call the original environment
-      next_state, reward, terminated, truncated, info = self.env.step(act_for_env)
-    
-      return self._filter_state(next_state), reward, terminated, truncated, info'''
 
     def step(self, action):
       # 1. HANDLE INPUT FROM AGENT
@@ -206,16 +174,6 @@ class GymWrapper:
 
       # 4. FILTER AND RETURN
       return self._filter_state(next_state), reward, terminated, truncated, info
-
-      '''# If the agent sends 0, we translate to -1.0 (Left)
-    # If the agent sends 1, we translate to 1.0 (Right)
-    # This works for Q-Learning, SARSA, and DQN
-      if isinstance(action, (int, np.integer)):
-        # Formula: (0 * 2) - 1 = -1.0 | (1 * 2) - 1 = 1.0
-        continuous_speed = float(action * 2.0 - 1.0)
-      else:
-        # If the action is already a float (from a different agent)
-        continuous_speed = action'''
 
     def render(self):
         return self.env.render()

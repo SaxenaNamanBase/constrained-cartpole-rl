@@ -13,6 +13,7 @@ MAX_STEPS = 500
 
 CONTROL_PARAMS = {
     'learning_rate': 0.001,
+    'learning_rate_qlearning': 0.03,
     'discount_factor': 0.99,
     'epsilon': 1.0,
     'min_epsilon': 0.01,

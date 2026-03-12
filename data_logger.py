@@ -5,8 +5,9 @@ import matplotlib.pyplot as plt
 import csv
 
 class DataLogger:
-    def __init__(self, log_params):
+    def __init__(self, log_params, session_dir):
         self.params = log_params
+        self.save_path = session_dir
         self.episode_rewards = []
         self.episode_lengths = []
         self.episode_q_values = []
