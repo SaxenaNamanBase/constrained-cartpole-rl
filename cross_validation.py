@@ -5,6 +5,7 @@ import numpy as np
 import gymnasium as gym
 import config
 import matplotlib.pyplot as plt
+import pandas as pd
 from gym_wrapper import GymWrapper
 from data_logger import DataLogger
 from exploration_strategies import EpsilonGreedyStrategy
@@ -168,7 +169,7 @@ def cross_validation_qlearning(model_class, exploration_strategy_class, config, 
         controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
         # Pass session_dir to DataLogger
         logger = DataLogger(config.LOG_PARAMS, session_dir=session_dir)
-        fold_rewards = [] 
+        #fold_rewards = [] 
 
         recent_rewards = []
         for episode in range(config.NUM_EPISODES):
@@ -193,7 +194,8 @@ def cross_validation_qlearning(model_class, exploration_strategy_class, config, 
                 controller.update_learning_rate(new_lr)
                 current_lr = new_lr
 
-        logger.save_to_csv(fold_name=f"fold_{fold+1}")
+        #logger.save_to_csv(fold_name=f"fold_{fold+1}")
+        #logger.save_logs_as_csv(filename_prefix=f"fold_{fold+1}")
 
         avg_reward = logger.get_average_reward()
         print(f"Fold {fold+1} Finished. Avg Reward: {avg_reward:.2f} | Final Epsilon: {controller.epsilon:.3f}")
@@ -202,10 +204,19 @@ def cross_validation_qlearning(model_class, exploration_strategy_class, config, 
             best_avg_reward = avg_reward
             best_controller = controller
             # Save the best model of the CV into the session folder
-            joblib.dump({'model': best_controller, 'config': config.CONTROL_PARAMS}, 
-                        os.path.join(session_dir, 'qlearning_best_model.pkl'))
+            best_logger_data = logger
+            #joblib.dump({'model': best_controller, 'config': config.CONTROL_PARAMS}, 
+                        #os.path.join(session_dir, 'qlearning_best_model.pkl'))
 
-    plot_rewards_from_csv(session_dir, fold_name="fold_1")
+    if best_logger_data is not None:
+        print(f"\n🏆 Saving Best Fold (Avg Reward: {best_avg_reward:.2f})")
+        
+        joblib.dump({'model': best_controller, 'config': config.CONTROL_PARAMS}, 
+                    os.path.join(session_dir, 'qlearning_best_model.pkl'))
+        
+        best_logger_data.save_logs_as_csv(filename_prefix="qlearning_best_fold")
+        
+        plot_rewards_from_csv(session_dir, csv_filename="qlearning_best_fold_logs.csv")
     env.close()
     return best_avg_reward, best_controller
 
@@ -612,6 +623,35 @@ def evaluate_agent(controller, eval_env, num_episodes=10):
         plot_path = os.path.join(save_path, 'training_plot_dqn.png')
         plt.savefig(plot_path)
     plt.show()'''
+
+def plot_rewards_from_csv(session_dir, csv_filename):
+    csv_path = os.path.join(session_dir, csv_filename)
+    
+    if not os.path.exists(csv_path):
+        print(f"Error: {csv_path} not found.")
+        return
+
+    df = pd.read_csv(csv_path)
+    plt.figure(figsize=(10, 5))
+    
+    # Plot raw rewards
+    plt.plot(df['episode'], df['reward'], label='Raw Reward', alpha=0.3, color='blue')
+    
+    # Plot moving average (Trendline)
+    if len(df) > 20:
+        df['ma'] = df['reward'].rolling(window=20).mean()
+        plt.plot(df['episode'], df['ma'], label='20-Ep Moving Avg', color='red', linewidth=2)
+
+    plt.title(f"Best Fold Training Performance ({os.path.basename(session_dir)})")
+    plt.xlabel("Episode")
+    plt.ylabel("Reward")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    save_img = os.path.join(session_dir, "best_fold_curve.png")
+    plt.savefig(save_img)
+    plt.show()
+    print(f"📊 Plot saved to {save_img}")
 
 def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path):
     plt.figure(figsize=(12, 6))
