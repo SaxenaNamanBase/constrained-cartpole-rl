@@ -412,7 +412,8 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir):
 
     # Final Save
     joblib.dump({'model': controller, 'config': config.CONTROL_PARAMS}, os.path.join(session_dir, 'dqn_final_model.pkl'))
-    plot_rewards(training_rewards, evaluation_rewards, 10, save_path=session_dir)
+    logger.save_logs_as_csv(filename_prefix="dqn")
+    plot_rewards_from_csv(session_dir, csv_filename="dqn_logs.csv")
     env.close()
     return controller
 
@@ -624,7 +625,7 @@ def evaluate_agent(controller, eval_env, num_episodes=10):
         plt.savefig(plot_path)
     plt.show()'''
 
-def plot_rewards_from_csv(session_dir, csv_filename):
+'''def plot_rewards_from_csv(session_dir, csv_filename):
     csv_path = os.path.join(session_dir, csv_filename)
     
     if not os.path.exists(csv_path):
@@ -651,7 +652,44 @@ def plot_rewards_from_csv(session_dir, csv_filename):
     save_img = os.path.join(session_dir, "best_fold_curve.png")
     plt.savefig(save_img)
     plt.show()
-    print(f"📊 Plot saved to {save_img}")
+    print(f"📊 Plot saved to {save_img}")'''
+
+def plot_rewards_from_csv(session_dir, csv_filename):
+    csv_path = os.path.join(session_dir, csv_filename)
+    if not os.path.exists(csv_path):
+        print(f"❌ Plotting Error: {csv_path} not found.")
+        return
+
+    df = pd.read_csv(csv_path)
+    plt.figure(figsize=(12, 6))
+    
+    # 1. Plot Training Rewards (Light blue background)
+    plt.plot(df['episode'], df['reward'], label='Training Reward (Raw)', alpha=0.3, color='#3498db')
+    
+    # 2. Plot Moving Average (The trendline)
+    if len(df) > 20:
+        df['smooth'] = df['reward'].rolling(window=20).mean()
+        plt.plot(df['episode'], df['smooth'], label='Trend (20-Ep MA)', color='#2980b9', linewidth=2)
+
+    # 3. Plot Evaluation Rewards (Distinct dots)
+    # This checks if the column exists and has data
+    if 'eval_reward' in df.columns:
+        # Filter rows where eval_reward is not empty
+        eval_data = df.dropna(subset=['eval_reward'])
+        if not eval_data.empty:
+            plt.scatter(eval_data['episode'], eval_data['eval_reward'], 
+                        color='#e74c3c', label='Evaluation Score (Best Model)', zorder=5, s=40)
+
+    plt.title(f"Performance: {os.path.basename(session_dir)}")
+    plt.xlabel("Episode")
+    plt.ylabel("Reward")
+    plt.legend(loc='upper left')
+    plt.grid(True, linestyle='--', alpha=0.5)
+    
+    # Save the plot inside the session folder
+    plot_name = csv_filename.replace('.csv', '.png')
+    plt.savefig(os.path.join(session_dir, plot_name))
+    plt.show()
 
 def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path):
     plt.figure(figsize=(12, 6))
