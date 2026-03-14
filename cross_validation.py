@@ -399,11 +399,11 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir):
             t += 1
 
         controller.decay_epsilon()
-        training_rewards.append(episode_reward)
+        logger.log_episode(episode + 1, episode_reward, t, epsilon=controller.epsilon)
 
         if (episode + 1) % 10 == 0:
             eval_reward = evaluate_agent(controller, eval_env)
-            evaluation_rewards.append(eval_reward)
+            logger.log_eval(episode + 1, eval_reward)
             if eval_reward >= best_eval_reward:
                 best_eval_reward = eval_reward
                 joblib.dump({'model': controller, 'episode': episode}, os.path.join(session_dir, 'dqn_best_model.pkl'))
