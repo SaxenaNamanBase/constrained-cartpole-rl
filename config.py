@@ -22,8 +22,9 @@ CONTROL_PARAMS = {
     'batch_size': 64,      # For DQN
     'update_target_steps': 1000,  # For DQN
     'patience': 100,          
-    'min_delta': 0.01,       
-    'decay_factor': 0.9
+    'min_delta': 0.05,       
+    'decay_factor': 0.5,
+    'min_lr': 0.001
 }
 
 # Logging parameters
