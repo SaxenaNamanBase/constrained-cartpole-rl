@@ -25,22 +25,6 @@ def create_session_folder(algorithm_name, config):
     os.makedirs(session_dir, exist_ok=True)
     return session_dir
 
-'''def performance_based_lr_update(episode, recent_rewards, control_params, current_lr):
-    patience = control_params['patience']
-    min_delta = control_params['min_delta']
-    decay_factor = control_params['decay_factor']
-    min_lr = control_params.get('min_lr', 1e-4)
-    
-    if len(recent_rewards) >= patience:
-        avg_reward_recent = np.mean(recent_rewards[-patience:])
-        past_rewards = recent_rewards[:-patience]
-        if len(past_rewards) == 0: return current_lr
-
-        avg_reward_past = np.mean(past_rewards)
-        if avg_reward_recent < avg_reward_past + min_delta:
-            return max(current_lr * decay_factor, min_lr)
-    return current_lr'''
-
 def performance_based_lr_update(episode, recent_rewards, control_params, current_lr):
 
     patience = control_params.get('patience', 100)
@@ -62,113 +46,7 @@ def performance_based_lr_update(episode, recent_rewards, control_params, current
                 
     return current_lr
 
-'''def cross_validation_qlearning(model_class, exploration_strategy_class, config, session_dir, k_folds=5):
-    best_avg_reward = -np.inf
-    best_controller = None
-    best_logger_data = None
-
-    winning_fold = 0
-    winning_episode = 0
-    win_final_eps = 0
-
-    init_lr = config.CONTROL_PARAMS['learning_rate_qlearning']
-    init_eps = config.CONTROL_PARAMS['epsilon']
-    print(f"🚀 Initial Params | LR: {init_lr} | Start Epsilon: {init_eps}")
-    
-    for fold in range(k_folds):
-        best_eval_in_fold = -np.inf
-        #current_lr = config.CONTROL_PARAMS['learning_rate_qlearning']
-        peak_episode_in_fold = 0
-        current_lr = init_lr
-
-        print(f"\n--- Fold {fold + 1}/{k_folds} | Session: {os.path.basename(session_dir)} ---")
-
-        env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
-                         mode=config.STATE_MODE, 
-                         action_mode=config.ACTION_MODE)
-        eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
-                      mode=config.STATE_MODE, action_mode=config.ACTION_MODE)
-        
-        controller = model_class(config.CONTROL_PARAMS, exploration_strategy_class(init_eps))
-        # Pass session_dir to DataLogger
-        logger = DataLogger(config.LOG_PARAMS, session_dir=session_dir)
-        #fold_rewards = [] 
-
-        recent_rewards = []
-        for episode in range(config.NUM_EPISODES):
-            state, _ = env.reset()
-            episode_reward = 0
-            for t in range(config.MAX_STEPS):
-                action = controller.get_action(state)
-                next_state, reward, terminated, truncated, _ = env.step(action)
-                done = terminated or truncated
-                controller.update(state, action, reward, next_state, done)
-                state = next_state
-                episode_reward += reward
-                if done: break
-
-            logger.log_episode(episode+1, episode_reward, t + 1, epsilon=controller.epsilon)
-            #recent_rewards.append(episode_reward)
-            controller.decay_epsilon()
-
-            if (episode + 1) % 20 == 0:  # Evaluate every 20 episodes
-              eval_reward = evaluate_agent(controller, eval_env)
-              logger.log_eval(episode + 1, eval_reward)
-
-              if eval_reward >= best_eval_in_fold:
-                    best_eval_in_fold = eval_reward
-                    peak_episode_in_fold = episode + 1
-                    fold_model_path = os.path.join(session_dir, f'temp_fold_{fold+1}_best.pkl')
-                    joblib.dump(controller, fold_model_path)
-
-            # LR Update
-            new_lr = performance_based_lr_update(episode, recent_rewards, config.CONTROL_PARAMS, current_lr)
-            if new_lr != current_lr:
-                controller.update_learning_rate(new_lr)
-                current_lr = new_lr
-
-        #logger.save_to_csv(fold_name=f"fold_{fold+1}")
-        #logger.save_logs_as_csv(filename_prefix=f"fold_{fold+1}")
-
-        avg_reward = logger.get_average_reward()
-        final_fold_lr = current_lr
-        final_fold_eps = controller.epsilon
-        
-        print(f" Fold {fold+1} Finished")
-        print(f"   - Avg Reward: {avg_reward:.2f}")
-        print(f"   - Final LR: {final_fold_lr:.6f}")
-        print(f"   - Final Epsilon: {final_fold_eps:.4f}")
-        #print(f"Fold {fold+1} Finished. Avg Reward: {avg_reward:.2f} | Final Epsilon: {controller.epsilon:.3f}")
-
-        #if avg_reward > best_avg_reward:
-            #best_avg_reward = avg_reward
-            #best_controller = controller
-            # Save the best model of the CV into the session folder
-            #best_logger_data = logger
-            #joblib.dump({'model': best_controller, 'config': config.CONTROL_PARAMS}, 
-                        #os.path.join(session_dir, 'qlearning_best_model.pkl'))
-
-        if avg_reward > best_avg_reward:
-            best_avg_reward = avg_reward
-            winning_fold = fold + 1
-            best_controller = joblib.load(os.path.join(session_dir, f'temp_fold_{fold+1}_best.pkl'))
-            best_logger_data = logger
-            win_final_lr = final_fold_lr
-            win_final_eps = final_fold_eps
-
-    if best_logger_data is not None:
-        print(f"\n Saving Best Fold (Avg Reward: {best_avg_reward:.2f})")
-        
-        joblib.dump({'model': best_controller, 'config': config.CONTROL_PARAMS}, 
-                    os.path.join(session_dir, 'qlearning_best_model.pkl'))
-        
-        best_logger_data.save_logs_as_csv(filename_prefix="qlearning_best_fold")
-        
-        plot_rewards_from_csv(session_dir, csv_filename="qlearning_best_fold_logs.csv")
-    env.close()
-    return best_avg_reward, best_controller'''
-
-def cross_validation_qlearning(model_class, exploration_strategy_class, config, session_dir, k_folds=5):
+def train_qlearning(model_class, exploration_strategy_class, config, session_dir, k_folds=5):
     best_avg_reward = -np.inf
     best_controller = None
     best_logger_data = None
@@ -291,7 +169,7 @@ def cross_validation_qlearning(model_class, exploration_strategy_class, config, 
         plot_rewards_from_csv(session_dir, csv_filename="qlearning_best_fold_logs.csv")
     
     env.close()
-    return best_avg_reward, best_controller
+    return best_controller
 
 def train_dqn(model_class, exploration_strategy_class, config, session_dir):
     env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
@@ -439,88 +317,349 @@ def train_dqn_until_overfitting(model_class, exploration_strategy_class, config,
     
     return controller
 
+'''def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_folds=5):
+    # Overall session tracking
+    overall_best_eval = -np.inf
+    session_champion_brain = None
+    winning_fold = 0
+    winning_episode = 0
+    
+    # Trackers for the final summary
+    best_avg_reward = -np.inf
+    best_logger_data = None
+    
+    init_lr = config.CONTROL_PARAMS.get('learning_rate_sarsa', 0.001)
 
-def train_sarsa(model_class, exploration_strategy_class, config):
-    env = GymWrapper(gym.make('CartPole-v1'))
-    exploration_strategy = exploration_strategy_class(config.CONTROL_PARAMS['epsilon'])
-    controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
-    logger = DataLogger(config.LOG_PARAMS)
+    for fold in range(k_folds):
+        print(f"\n--- Fold {fold+1}/{k_folds} | Session: {os.path.basename(session_dir)} ---")
+        
+        # Initialize env, controller, and logger for THIS fold
+        env = GymWrapper(gym.make('CustomCartPoleEnv-v0', max_episode_steps=config.MAX_STEPS), 
+                         mode=config.STATE_MODE)
+        eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', max_episode_steps=config.MAX_STEPS), 
+                              mode=config.STATE_MODE)
+        
+        exploration_strategy = exploration_strategy_class(config.CONTROL_PARAMS['epsilon'])
+        controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
+        logger = DataLogger(config.LOG_PARAMS, session_dir)
+        
+        current_lr = init_lr
+        recent_rewards = []
+        peak_episode_in_fold = 0
+        best_eval_in_fold = -np.inf
 
-    reward_history = []
+        for episode in range(config.NUM_EPISODES_SARSA):
+            state, _ = env.reset()
+            action = controller.get_action(state)  # SARSA: Select initial action
+            episode_reward = 0
 
-    for episode in range(config.NUM_EPISODES_SARSA):
-        state, _ = env.reset()
-        action = controller.get_action(state)  # Select initial action
-        episode_reward = 0
+            for t in range(config.MAX_STEPS):
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                done = terminated or truncated
+                
+                # SARSA: Select next action BEFORE update
+                next_action = controller.get_action(next_state) 
+                
+                # Update using current state-action and NEXT state-action
+                controller.update(state, action, reward, next_state, next_action, done)
+                
+                state = next_state
+                action = next_action
+                episode_reward += reward
+                
+                if done: break
 
-        for t in range(config.MAX_STEPS):
-            #next_state, reward, done, _ = env.step(action)
-            next_state, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-            next_action = controller.get_action(next_state)  # Select next action
-            
-            controller.update(state, action, reward, next_state, next_action, done)
-            
-            state = next_state
-            action = next_action  # Move to the next state-action pair
-            episode_reward += reward
-            
-            if done:
-                break
+            # 1. Decay Epsilon & Update LR
+            controller.decay_epsilon()
+            current_lr = performance_based_lr_update(
+                episode + 1, recent_rewards, 
+                config.CONTROL_PARAMS, current_lr
+            )
+            # Update the controller's internal alpha/learning rate
+            controller.alpha = current_lr 
 
-        # Decay epsilon after each episode
-        controller.decay_epsilon()
+            # 2. Logging
+            logger.log_episode(episode + 1, episode_reward, t + 1, 
+                               epsilon=controller.epsilon, lr=current_lr)
+            recent_rewards.append(episode_reward)
 
-        logger.log_episode(episode, episode_reward, t + 1)
+            # 3. Evaluation Block (Periodic)
+            if (episode + 1) % 20 == 0:
+                eval_reward = evaluate_agent(controller, eval_env)
+                logger.log_eval(episode + 1, eval_reward)
+                
+                if eval_reward >= best_eval_in_fold:
+                    best_eval_in_fold = eval_reward
+                    peak_episode_in_fold = episode + 1
+                
+                # Global Champion Tracking
+                if eval_reward >= overall_best_eval:
+                    overall_best_eval = eval_reward
+                    winning_fold = fold + 1
+                    winning_episode = episode + 1
+                    session_champion_brain = copy.deepcopy(controller)
 
-        reward_history.append(episode_reward)
+        # --- END OF FOLD ---
+        avg_reward = logger.get_average_reward()
+        final_fold_eps = controller.epsilon
+        
+        print(f"✅ Fold {fold+1} Finished")
+        print(f"   - Avg Reward: {avg_reward:.2f}")
+        print(f"   - Peak Eval: {best_eval_in_fold:.2f} (at Ep {peak_episode_in_fold})")
+        print(f"   - Final Epsilon: {final_fold_eps:.4f}")
 
-        # Calculate the average reward over the last 100 episodes
-        if len(reward_history) > 100:
-            reward_history.pop(0)  # Keep only the last 100 rewards
+        # Save the FINAL model for this fold
+        fold_final_path = os.path.join(session_dir, f'sarsa_fold_{fold+1}_final.pkl')
+        joblib.dump({'model': controller, 'config': config.CONTROL_PARAMS, 
+                     'state_mode': config.STATE_MODE}, fold_final_path)
 
-        average_reward = sum(reward_history) / len(reward_history)
+        print(f" Fold {fold+1} Finished. Final model saved to: {os.path.basename(fold_final_path)}")
+        
+        if avg_reward > best_avg_reward:
+            best_avg_reward = avg_reward
+            best_logger_data = logger
+            win_final_eps = final_fold_eps
+            best_controller = session_champion_brain
 
-        print(f"Episode {episode}: Reward = {episode_reward}, Average Reward (last 100 episodes) = {average_reward:.2f}, Steps = {t + 1}")
+    # --- FINAL SESSION SUMMARY ---
+    if best_logger_data is not None:
+        print(f"\n")
+        print(f" SESSION WINNER: Fold {winning_fold}")
+        print(f" Best Avg Reward: {best_avg_reward:.2f}")
+        print(f" Peak Performance: Episode {winning_episode}")
+        print(f" Final Epsilon: {win_final_eps:.4f}")
+        print(f"\n")
+        
+        # Save the Absolute Champion (Peak version)
+        joblib.dump({'model': session_champion_brain, 'config': config.CONTROL_PARAMS,
+                     'state_mode': config.STATE_MODE}, 
+                    os.path.join(session_dir, 'sarsa_best_model.pkl'))
+        
+        # Finalize Logs & Plots using the universal CSV plotter
+        best_logger_data.save_logs_as_csv(filename_prefix="sarsa_best_fold")
+        plot_rewards_from_csv(session_dir, csv_filename="sarsa_best_fold_logs.csv")
+    
+    return best_avg_reward, session_champion_brain'''
 
-    env.close()
+def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_folds=5):
 
-    # Create results directory if it doesn't exist
-    save_path = config.LOG_PARAMS['save_path']
-    os.makedirs(save_path, exist_ok=True)
+    # Overall session tracking
 
-    # Save the plot
-    plot_sarsa_training(logger, config, save_path=save_path)
+    overall_best_eval = -np.inf
 
-    # Save the model
-    model_file_path = os.path.join(save_path, 'sarsa_model.pkl')
-    joblib.dump(controller, model_file_path)
+    session_champion_brain = None
 
-    # Save the logs as CSV
-    logger.save_logs_as_csv(state='train')
+    winning_fold = 0
 
-    # Save the metrics
-    logger.save_metrics(state='train')
+    winning_episode = 0
 
-    return controller
+   
+
+    # Trackers for the final summary
+
+    best_avg_reward = -np.inf
+
+    best_logger_data = None
+
+   
+
+    init_lr = config.CONTROL_PARAMS['learning_rate']
 
 
-'''def evaluate_agent(controller, eval_env, num_episodes=10):
-    total_reward = 0
-    for _ in range(num_episodes):
-        state,_ = eval_env.reset()
-        done = False
-        episode_reward = 0
-        while not done:
-            # Set explore=False to disable exploration during evaluation
-            action = controller.get_action(state, explore=False)
-            next_state, reward, terminated, truncated, info = eval_env.step(action)
-            done = terminated or truncated
-            episode_reward += reward
-            state = next_state
-        total_reward += episode_reward
-    avg_eval_reward = total_reward / num_episodes
-    return avg_eval_reward'''
+
+    for fold in range(k_folds):
+
+        print(f"\n--- Fold {fold+1}/{k_folds} | Session: {os.path.basename(session_dir)} ---")
+
+       
+
+        # Initialize env, controller, and logger for THIS fold
+
+        env = GymWrapper(gym.make('CustomCartPoleEnv-v0', max_episode_steps=config.MAX_STEPS),
+
+                         mode=config.STATE_MODE)
+
+        eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', max_episode_steps=config.MAX_STEPS),
+
+                              mode=config.STATE_MODE)
+
+       
+
+        exploration_strategy = exploration_strategy_class(config.CONTROL_PARAMS['epsilon'])
+
+        controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
+
+        logger = DataLogger(config.LOG_PARAMS, session_dir)
+
+       
+
+        current_lr = init_lr
+
+        recent_rewards = []
+
+        peak_episode_in_fold = 0
+
+        best_eval_in_fold = -np.inf
+
+
+
+        for episode in range(config.NUM_EPISODES_SARSA):
+
+            state, _ = env.reset()
+
+            action = controller.get_action(state)  # SARSA: Select initial action
+
+            episode_reward = 0
+
+
+
+            for t in range(config.MAX_STEPS):
+
+                next_state, reward, terminated, truncated, _ = env.step(action)
+
+                done = terminated or truncated
+
+               
+
+                # SARSA: Select next action BEFORE update
+
+                next_action = controller.get_action(next_state)
+
+               
+
+                # Update using current state-action and NEXT state-action
+
+                controller.update(state, action, reward, next_state, next_action, done)
+
+               
+
+                state = next_state
+
+                action = next_action
+
+                episode_reward += reward
+
+               
+
+                if done: break
+
+
+
+            # 1. Decay Epsilon & Update LR
+
+            controller.decay_epsilon()
+
+            #current_lr = performance_based_lr_update(
+
+                #episode + 1, recent_rewards,
+
+                #config.CONTROL_PARAMS, current_lr
+
+            #)
+
+            # Update the controller's internal alpha/learning rate
+
+            controller.alpha = current_lr
+
+
+
+            # 2. Logging
+
+            logger.log_episode(episode + 1, episode_reward, t + 1,
+
+                               epsilon=controller.epsilon, lr=current_lr)
+
+            recent_rewards.append(episode_reward)
+
+
+
+            # 3. Evaluation Block (Periodic)
+
+            if (episode + 1) % 20 == 0:
+
+                eval_reward = evaluate_agent(controller, eval_env)
+
+                logger.log_eval(episode + 1, eval_reward)
+
+               
+
+                if eval_reward >= best_eval_in_fold:
+
+                    best_eval_in_fold = eval_reward
+
+                    peak_episode_in_fold = episode + 1
+
+               
+
+                # Global Champion Tracking
+
+                if eval_reward >= overall_best_eval:
+
+                    overall_best_eval = eval_reward
+
+                    winning_fold = fold + 1
+
+                    winning_episode = episode + 1
+
+                    session_champion_brain = copy.deepcopy(controller)
+
+
+
+        # --- END OF FOLD ---
+
+        avg_reward = logger.get_average_reward()
+
+       
+
+        # Save the FINAL model for this fold
+
+        fold_final_path = os.path.join(session_dir, f'sarsa_fold_{fold+1}_final.pkl')
+
+        joblib.dump({'model': controller, 'config': config.CONTROL_PARAMS,
+
+                     'state_mode': config.STATE_MODE}, fold_final_path)
+
+       
+
+        if avg_reward > best_avg_reward:
+
+            best_avg_reward = avg_reward
+
+            best_logger_data = logger
+
+            final_fold_lr = current_lr
+
+            final_fold_eps = controller.epsilon
+
+
+
+    # --- FINAL SESSION SUMMARY ---
+
+    if best_logger_data is not None:
+
+        print(f"\n🏆 SARSA SESSION WINNER: Fold {winning_fold}")
+
+       
+
+        # Save the Absolute Champion (Peak version)
+
+        joblib.dump({'model': session_champion_brain, 'config': config.CONTROL_PARAMS,
+
+                     'state_mode': config.STATE_MODE},
+
+                    os.path.join(session_dir, 'sarsa_best_model.pkl'))
+
+       
+
+        # Finalize Logs & Plots using the universal CSV plotter
+
+        best_logger_data.save_logs_as_csv(filename_prefix="sarsa_best_fold")
+
+        plot_rewards_from_csv(session_dir, csv_filename="sarsa_best_fold_logs.csv")
+
+   
+
+    return session_champion_brain
 
 def evaluate_agent(controller, eval_env, num_episodes=10):
     total_reward = 0
@@ -546,67 +685,10 @@ def evaluate_agent(controller, eval_env, num_episodes=10):
     avg_eval_reward = total_reward / num_episodes
     return avg_eval_reward
 
-'''def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path=None):
-    # Debugging prints
-    print(f"Training Rewards: {training_rewards}")
-    print(f"Evaluation Rewards: {evaluation_rewards}")
-    
-    if not training_rewards or not evaluation_rewards:
-        print("One of the reward lists is empty. Skipping plot.")
-        return
-    
-    plt.figure(figsize=(12, 6))
-    
-    # Plot training rewards
-    plt.plot(training_rewards, label='Training Reward', color='blue')
-    
-    # Plot evaluation rewards at the appropriate intervals
-    eval_episodes = list(range(eval_interval, len(training_rewards) + 1, eval_interval))
-    if len(evaluation_rewards) > 0 and len(eval_episodes) == len(evaluation_rewards):
-        plt.plot(eval_episodes, evaluation_rewards, label='Evaluation Reward', color='red')
-
-    plt.xlabel('Episode')
-    plt.ylabel('Reward')
-    plt.title('Training and Evaluation Rewards Over Time')
-    plt.legend()
-    if save_path:
-        plot_path = os.path.join(save_path, 'training_plot_dqn.png')
-        plt.savefig(plot_path)
-    plt.show()'''
-
-'''def plot_rewards_from_csv(session_dir, csv_filename):
-    csv_path = os.path.join(session_dir, csv_filename)
-    
-    if not os.path.exists(csv_path):
-        print(f"Error: {csv_path} not found.")
-        return
-
-    df = pd.read_csv(csv_path)
-    plt.figure(figsize=(10, 5))
-    
-    # Plot raw rewards
-    plt.plot(df['episode'], df['reward'], label='Raw Reward', alpha=0.3, color='blue')
-    
-    # Plot moving average (Trendline)
-    if len(df) > 20:
-        df['ma'] = df['reward'].rolling(window=20).mean()
-        plt.plot(df['episode'], df['ma'], label='20-Ep Moving Avg', color='red', linewidth=2)
-
-    plt.title(f"Best Fold Training Performance ({os.path.basename(session_dir)})")
-    plt.xlabel("Episode")
-    plt.ylabel("Reward")
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    
-    save_img = os.path.join(session_dir, "best_fold_curve.png")
-    plt.savefig(save_img)
-    plt.show()
-    print(f"📊 Plot saved to {save_img}")'''
-
 def plot_rewards_from_csv(session_dir, csv_filename):
     csv_path = os.path.join(session_dir, csv_filename)
     if not os.path.exists(csv_path):
-        print(f"❌ Plotting Error: {csv_path} not found.")
+        print(f" Plotting Error: {csv_path} not found.")
         return
 
     df = pd.read_csv(csv_path)
@@ -652,44 +734,6 @@ def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path)
     plt.legend()
     plt.savefig(os.path.join(save_path, 'learning_curve.png'))
     plt.close()
-  
-'''def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
-    # 1. Update global config variables based on dropdown choices
-    config.STATE_MODE = mode
-    config.STOP_LOGIC = stop_logic
-    config.ACTION_MODE = action_mode
-    config.STATE_DIM = 2 if mode == '2D' else 4
-
-    print(f"--- Configuration Updated ---")
-    print(f"Algorithm: {algorithm} | Mode: {config.STATE_MODE} | State Dim: {config.STATE_DIM} | Action: {action_mode}")
-
-    # 2. Q-LEARNING BLOCK
-    if algorithm == 'qlearning':
-        # Uses your existing CV logic
-        best_reward, controller = cross_validation_qlearning(QLearningControl, EpsilonGreedyStrategy, config)
-        print(f"Best Average Reward from Q-Learning Cross-Validation: {best_reward}")
-        return controller
-
-    # 3. DQN BLOCK
-    elif algorithm == 'dqn':
-        # Check stop_logic from dropdown to decide which function to run
-        if config.STOP_LOGIC == 'overfitting':
-            controller = train_dqn_until_overfitting(DQNControl, EpsilonGreedyStrategy, config)
-        else:
-            controller = train_dqn(DQNControl, EpsilonGreedyStrategy, config)
-            
-        print(f"DQN Training completed.")
-        return controller
-
-    # 4. SARSA BLOCK
-    elif algorithm == 'sarsa':
-        # Sarsa will now use the dynamic bins we set up earlier
-        controller = train_sarsa(SarsaControl, EpsilonGreedyStrategy, config)
-        print(f"SARSA Training completed.")
-        return controller
-
-    else:
-        raise ValueError(f"Unknown algorithm: {algorithm}")'''
 
 def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
     config.STATE_MODE = mode
@@ -702,7 +746,7 @@ def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
     print(f"\n🚀 Starting {algorithm.upper()} | Mode: {mode} | Folder: {session_dir}")
 
     if algorithm == 'qlearning':
-        best_reward, controller = cross_validation_qlearning(QLearningControl, EpsilonGreedyStrategy, config, session_dir)
+        controller = train_qlearning(QLearningControl, EpsilonGreedyStrategy, config, session_dir)
     elif algorithm == 'dqn':
         controller = train_dqn(DQNControl, EpsilonGreedyStrategy, config, session_dir)
     elif algorithm == 'sarsa':

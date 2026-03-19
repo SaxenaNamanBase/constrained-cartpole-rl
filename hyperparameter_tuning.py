@@ -20,7 +20,7 @@ def tune_hyperparameters_qlearning(model_class, exploration_strategy_class, conf
     @use_named_args(space)
     def objective(learning_rate, discount_factor, epsilon):
         # Initialize environment
-        env = GymWrapper(gym.make('CartPole-v1'))
+        env = GymWrapper(gym.make('CustomCartPoleEnv-v1'))
         state_dim = env.env.observation_space.shape[0]
         action_dim = env.env.action_space.n
         exploration_strategy = exploration_strategy_class(epsilon=epsilon)
@@ -273,8 +273,14 @@ def tune_hyperparameters_dqn(model_class, exploration_strategy_class, cfg):
 
 def tune_hyperparameters_sarsa(model_class, exploration_strategy_class, config):
     # Define the hyperparameter search space
+    #space = [
+     #   Real(1e-3, 1e-1, name='learning_rate', prior='log-uniform'),
+      #  Real(0.9, 0.999, name='discount_factor'),
+       # Real(0.01, 0.2, name='epsilon'),
+    #]
+
     space = [
-        Real(1e-3, 1e-1, name='learning_rate', prior='log-uniform'),
+        Real(1e-4, 1e-1, name='learning_rate_sarsa', prior='log-uniform'),
         Real(0.9, 0.999, name='discount_factor'),
         Real(0.01, 0.2, name='epsilon'),
     ]
@@ -282,7 +288,7 @@ def tune_hyperparameters_sarsa(model_class, exploration_strategy_class, config):
     @use_named_args(space)
     def objective(learning_rate, discount_factor, epsilon):
         # Initialize environment
-        env = GymWrapper(gym.make('CartPole-v1'))
+        env = GymWrapper(gym.make('CustomCartPoleEnv-v1'))
         exploration_strategy = exploration_strategy_class(epsilon=epsilon)
         
         # Update config with the current hyperparameters
