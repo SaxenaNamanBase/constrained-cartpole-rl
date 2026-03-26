@@ -25,7 +25,14 @@ CONTROL_PARAMS = {
     'patience': 100,          
     'min_delta': 0.05,       
     'decay_factor': 0.5,
-    'min_lr': 0.001
+    'min_lr': 0.001,
+    'num_bins': [12, 12, 12, 12],  # Add this!
+    'state_bounds': [              # Add this!
+        [-2.4, 2.4],     # x
+        [-3.0, 3.0],     # x_dot
+        [-0.418, 0.418], # theta
+        [-3.5, 3.5]      # theta_dot
+    ]
 }
 
 # Logging parameters

@@ -444,220 +444,123 @@ def train_dqn_until_overfitting(model_class, exploration_strategy_class, config,
 def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_folds=5):
 
     # Overall session tracking
-
     overall_best_eval = -np.inf
-
     session_champion_brain = None
-
     winning_fold = 0
-
     winning_episode = 0
 
-   
-
-    # Trackers for the final summary
-
     best_avg_reward = -np.inf
-
     best_logger_data = None
 
-   
-
-    init_lr = config.CONTROL_PARAMS['learning_rate']
-
-
+    init_lr = config.CONTROL_PARAMS['learning_rate_sarsa']
 
     for fold in range(k_folds):
-
         print(f"\n--- Fold {fold+1}/{k_folds} | Session: {os.path.basename(session_dir)} ---")
-
-       
-
         # Initialize env, controller, and logger for THIS fold
 
         env = GymWrapper(gym.make('CustomCartPoleEnv-v0', max_episode_steps=config.MAX_STEPS),
-
                          mode=config.STATE_MODE)
 
         eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', max_episode_steps=config.MAX_STEPS),
-
                               mode=config.STATE_MODE)
 
        
 
         exploration_strategy = exploration_strategy_class(config.CONTROL_PARAMS['epsilon'])
-
         controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
-
         logger = DataLogger(config.LOG_PARAMS, session_dir)
 
-       
-
         current_lr = init_lr
-
         recent_rewards = []
-
         peak_episode_in_fold = 0
-
         best_eval_in_fold = -np.inf
 
-
-
         for episode in range(config.NUM_EPISODES_SARSA):
-
             state, _ = env.reset()
-
             action = controller.get_action(state)  # SARSA: Select initial action
-
             episode_reward = 0
 
-
-
             for t in range(config.MAX_STEPS):
-
                 next_state, reward, terminated, truncated, _ = env.step(action)
-
                 done = terminated or truncated
 
-               
-
                 # SARSA: Select next action BEFORE update
-
                 next_action = controller.get_action(next_state)
 
-               
-
                 # Update using current state-action and NEXT state-action
-
                 controller.update(state, action, reward, next_state, next_action, done)
 
-               
-
                 state = next_state
-
                 action = next_action
-
                 episode_reward += reward
-
-               
 
                 if done: break
 
-
-
             # 1. Decay Epsilon & Update LR
-
             controller.decay_epsilon()
-
             #current_lr = performance_based_lr_update(
-
                 #episode + 1, recent_rewards,
-
                 #config.CONTROL_PARAMS, current_lr
-
             #)
-
             # Update the controller's internal alpha/learning rate
-
+            current_lr = performance_based_lr_update(episode + 1, recent_rewards, config.CONTROL_PARAMS, current_lr)
             controller.alpha = current_lr
 
-
-
             # 2. Logging
-
             logger.log_episode(episode + 1, episode_reward, t + 1,
-
                                epsilon=controller.epsilon, lr=current_lr)
-
             recent_rewards.append(episode_reward)
 
-
-
             # 3. Evaluation Block (Periodic)
-
             if (episode + 1) % 20 == 0:
-
                 eval_reward = evaluate_agent(controller, eval_env)
-
                 logger.log_eval(episode + 1, eval_reward)
 
-               
-
                 if eval_reward >= best_eval_in_fold:
-
                     best_eval_in_fold = eval_reward
-
                     peak_episode_in_fold = episode + 1
 
-               
-
                 # Global Champion Tracking
-
                 if eval_reward >= overall_best_eval:
-
                     overall_best_eval = eval_reward
-
                     winning_fold = fold + 1
-
                     winning_episode = episode + 1
-
                     session_champion_brain = copy.deepcopy(controller)
 
-
-
         # --- END OF FOLD ---
-
         avg_reward = logger.get_average_reward()
 
-       
+        print(f"✅ Fold {fold+1} Finished")
+        print(f"   - Avg Reward: {avg_reward:.2f}")
+        print(f"   - Peak Eval: {best_eval_in_fold:.2f} (at Ep {peak_episode_in_fold})")
+        print(f"   - Final LR: {current_lr:.6f}")
+        print(f"   - Final Epsilon: {controller.epsilon:.4f}")
 
         # Save the FINAL model for this fold
-
         fold_final_path = os.path.join(session_dir, f'sarsa_fold_{fold+1}_final.pkl')
-
         joblib.dump({'model': controller, 'config': config.CONTROL_PARAMS,
-
                      'state_mode': config.STATE_MODE}, fold_final_path)
 
-       
+        print(f" Fold {fold+1} Finished. Final model saved to: {os.path.basename(fold_final_path)}")
 
         if avg_reward > best_avg_reward:
-
             best_avg_reward = avg_reward
-
             best_logger_data = logger
-
             final_fold_lr = current_lr
-
             final_fold_eps = controller.epsilon
 
-
-
     # --- FINAL SESSION SUMMARY ---
-
     if best_logger_data is not None:
-
         print(f"\n🏆 SARSA SESSION WINNER: Fold {winning_fold}")
 
-       
-
         # Save the Absolute Champion (Peak version)
-
         joblib.dump({'model': session_champion_brain, 'config': config.CONTROL_PARAMS,
-
                      'state_mode': config.STATE_MODE},
-
                     os.path.join(session_dir, 'sarsa_best_model.pkl'))
 
-       
-
         # Finalize Logs & Plots using the universal CSV plotter
-
         best_logger_data.save_logs_as_csv(filename_prefix="sarsa_best_fold")
-
         plot_rewards_from_csv(session_dir, csv_filename="sarsa_best_fold_logs.csv")
-
-   
 
     return session_champion_brain
 

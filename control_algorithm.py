@@ -173,6 +173,9 @@ class QLearningControl(ControlAlgorithm):
         self.min_epsilon = control_params.get('min_epsilon', 0.01)
         self.decay_rate = control_params.get('decay_rate', 0.995)
 
+        self.num_bins = control_params.get('num_bins', [12, 12, 12, 12])
+        self.state_bounds = control_params.get('state_bounds')
+
     def get_action(self, state, epsilon=0.1):
         
         state = self._discretize_state(state)
@@ -187,7 +190,7 @@ class QLearningControl(ControlAlgorithm):
 
         return action
 
-    def update(self, state, action, reward, next_state, done):
+    '''def update(self, state, action, reward, next_state, done):
         state = self._discretize_state(state)
         next_state = self._discretize_state(next_state)
         
@@ -201,7 +204,22 @@ class QLearningControl(ControlAlgorithm):
         
         #new_q = current_q + self.params['learning_rate'] * (reward + self.params['discount_factor'] * max_next_q - current_q)
         new_q = current_q + self.learning_rate * (reward + self.params['discount_factor'] * max_next_q - current_q)
-        self.q_table[state][action] = new_q
+        self.q_table[state][action] = new_q'''
+    def update(self, state, action, reward, next_state, done):
+        state_d = self._discretize_state(state)
+        next_state_d = self._discretize_state(next_state)
+        
+        self.q_table.setdefault(state_d, [0, 0])
+        self.q_table.setdefault(next_state_d, [0, 0])
+        
+        current_q = self.q_table[state_d][action]
+        
+        # Terminal State Logic: If done, there is no future reward
+        max_next_q = 0 if done else np.max(self.q_table[next_state_d])
+        
+        # Standard Q-Learning Update
+        td_target = reward + self.params['discount_factor'] * max_next_q
+        self.q_table[state_d][action] += self.learning_rate * (td_target - current_q)
 
     def update_learning_rate(self, new_lr):
         """Dynamically update the learning rate during training."""
@@ -211,7 +229,7 @@ class QLearningControl(ControlAlgorithm):
         """Decay the epsilon value over time."""
         self.epsilon = max(self.min_epsilon, self.epsilon * self.decay_rate)
 
-    def _discretize_state(self, state):
+    '''def _discretize_state(self, state):
         #return tuple(np.round(x, 1) for x in state)
         ##num_bins = [6, 12, 12, 12]
         num_bins = [12, 12, 12, 12]
@@ -234,13 +252,32 @@ class QLearningControl(ControlAlgorithm):
             bin_idx = np.digitize(state[i], np.linspace(active_bounds[i][0], active_bounds[i][1], active_bins[i] - 1))
             discretized.append(int(bin_idx))
             
+        return tuple(discretized)'''
+    def _discretize_state(self, state):
+        # 3. Dynamic Selection Logic
+        if len(state) == 2:
+            # Use only theta and theta_dot indices [2, 3]
+            active_bounds = self.state_bounds[2:]
+            active_bins = self.num_bins[2:]
+        else:
+            active_bounds = self.state_bounds
+            active_bins = self.num_bins
+
+        discretized = []
+        for i in range(len(state)):
+            # Create the bin boundaries dynamically based on the current config
+            bins = np.linspace(active_bounds[i][0], active_bounds[i][1], active_bins[i] - 1)
+            bin_idx = np.digitize(state[i], bins)
+            discretized.append(int(bin_idx))
+            
         return tuple(discretized)
 
-class SarsaControl(ControlAlgorithm):
+'''class SarsaControl(ControlAlgorithm):
     def __init__(self, control_params, exploration_strategy):
         super().__init__(control_params, exploration_strategy)
         self.q_table = {}
         self.state_bins = self._create_bins()  # Create bins for discretization
+        self.alpha = self.params.get('learning_rate_sarsa', 0.001)        ##################
         self.epsilon = self.params['epsilon']  # Initial epsilon
         self.epsilon_decay = self.params.get('epsilon_decay', 0.99)  # Decay factor
         self.min_epsilon = self.params.get('min_epsilon', 0.01)  # Minimum epsilon
@@ -299,10 +336,80 @@ class SarsaControl(ControlAlgorithm):
         # SARSA update rule
         current_q = self.q_table[state][action]
         next_q = self.q_table[next_state][next_action]
-        new_q = current_q + self.params['learning_rate'] * (reward + self.params['discount_factor'] * next_q - current_q)
+
+        if done:
+            target = reward
+        else:
+            target = reward + self.params['discount_factor'] * next_q
+
+        new_q = current_q + self.alpha * (target - current_q)
+        #new_q = current_q + self.alpha * (reward + self.params['discount_factor'] * next_q - current_q)
         self.q_table[state][action] = new_q
 
     def decay_epsilon(self):
         self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
+'''
 
+class SarsaControl(ControlAlgorithm):
+    def __init__(self, control_params, exploration_strategy):
+        super().__init__(control_params, exploration_strategy)
+        self.q_table = {}
+        # 1. Use internal attributes for dynamic updates
+        self.alpha = control_params.get('learning_rate_sarsa', 0.03) 
+        self.epsilon = control_params['epsilon']
+        self.decay_rate = control_params.get('decay_rate', 0.995)
+        self.min_epsilon = control_params.get('min_epsilon', 0.01)
+        
+        # 2. Pull bins and bounds from the params (no more hardcoding!)
+        self.num_bins = control_params.get('num_bins', [12, 12, 12, 12])
+        self.state_bounds = control_params.get('state_bounds')
+
+    def _discretize_state(self, state):
+        # Use the logic from your Q-Learning but pull from self.num_bins
+        if len(state) == 2:
+            active_bounds = self.state_bounds[2:]
+            active_bins = self.num_bins[2:]
+        else:
+            active_bounds = self.state_bounds
+            active_bins = self.num_bins
+            
+        discretized = []
+        for i in range(len(state)):
+            # np.linspace creates the boundaries based on your bin count
+            bins = np.linspace(active_bounds[i][0], active_bounds[i][1], active_bins[i] - 1)
+            discretized.append(int(np.digitize(state[i], bins)))
+            
+        return tuple(discretized)
+
+    def get_action(self, state):  # <--- Remove any extra arguments here
+        state_d = self._discretize_state(state)
+
+        if state_d not in self.q_table:
+            self.q_table[state_d] = [0, 0]
+
+        # Use the internal self.epsilon we initialized in __init__
+        if np.random.rand() < self.epsilon:
+            action = np.random.choice(len(self.q_table[state_d]))
+        else:
+            action = np.argmax(self.q_table[state_d])
+
+        return action
+
+    def update(self, state, action, reward, next_state, next_action, done):
+        state = self._discretize_state(state)
+        next_state = self._discretize_state(next_state)
+
+        self.q_table.setdefault(state, [0, 0])
+        self.q_table.setdefault(next_state, [0, 0])
+
+        current_q = self.q_table[state][action]
+        # In SARSA, if the episode is done, next_q is 0
+        next_q = 0 if done else self.q_table[next_state][next_action]
+        
+        # Use self.alpha here
+        td_target = reward + self.params['discount_factor'] * next_q
+        self.q_table[state][action] += self.alpha * (td_target - current_q)
+
+    def decay_epsilon(self):
+        self.epsilon = max(self.min_epsilon, self.epsilon * self.decay_rate)
 
