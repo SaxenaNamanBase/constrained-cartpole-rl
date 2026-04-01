@@ -13,10 +13,32 @@ from exploration_strategies import EpsilonGreedyStrategy
 import os
 import datetime
 
-def create_session_folder(algorithm_name, config):
+'''def create_session_folder(algorithm_name, config):
     """Creates a unique directory for the current training session."""
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     folder_name = f"{algorithm_name}_{config.STATE_MODE}_{timestamp}"
+    
+    # Ensure the base Results directory exists
+    base_path = config.LOG_PARAMS['save_path']
+    session_dir = os.path.join(base_path, folder_name)
+    
+    os.makedirs(session_dir, exist_ok=True)
+    return session_dir'''
+
+def create_session_folder(algorithm_name, config, tuned=False):
+    """Creates a unique directory with tuning and action mode flags."""
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    
+    # 1. Determine Tuning Prefix
+    tuning_status = "Tuned" if tuned else "Default"
+    
+    # 2. Handle DQN Specifics (Action Mode)
+    if algorithm_name.lower() == 'dqn':
+        # Shortening to 'Disc' or 'Cont' keeps folder names from getting too long
+        act_suffix = "Disc" if config.ACTION_MODE == 'discrete' else "Cont"
+        folder_name = f"{algorithm_name}_{act_suffix}_{config.STATE_MODE}_{tuning_status}_{timestamp}"
+    else:
+        folder_name = f"{algorithm_name}_{config.STATE_MODE}_{tuning_status}_{timestamp}"
     
     # Ensure the base Results directory exists
     base_path = config.LOG_PARAMS['save_path']
@@ -58,6 +80,17 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
 
     init_lr = config.CONTROL_PARAMS['learning_rate_qlearning']
     init_eps = config.CONTROL_PARAMS['epsilon']
+
+    params_to_save = {
+        "ALGORITHM": "DQN",
+        "ACTION_MODE": config.ACTION_MODE,
+        "STATE_MODE": config.STATE_MODE,
+        "STOP_LOGIC": str(stop_logic),
+        "CONTROL_PARAMS": config.CONTROL_PARAMS
+    }
+    with open(os.path.join(session_dir, "initial_params.json"), "w") as f:
+        json.dump(params_to_save, f, indent=4)
+    print(f"📝 Initial Parameters Saved to: {session_dir}/initial_params.json")
     
     print(f"🚀 Initial Params | LR: {init_lr} | Start Epsilon: {init_eps}")
     
@@ -663,7 +696,7 @@ def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
     config.STATE_DIM = 2 if mode == '2D' else 4
 
     # Create the session directory here
-    session_dir = create_session_folder(algorithm_name=algorithm, config=config)
+    session_dir = create_session_folder(algorithm_name=algorithm, config=config, tuned=was_tuned)
     print(f"\n🚀 Starting {algorithm.upper()} | Mode: {mode} | Folder: {session_dir}")
 
     if algorithm == 'qlearning':

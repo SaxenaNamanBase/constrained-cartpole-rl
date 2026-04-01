@@ -9,7 +9,7 @@ import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning, module="gymnasium.spaces.box")
 
-def tune_hyperparameters_qlearning(model_class, exploration_strategy_class, config):
+'''def tune_hyperparameters_qlearning(model_class, exploration_strategy_class, config):
     # Define the hyperparameter search space
     space = [
         Real(1e-5, 1e-1, name='learning_rate', prior='log-uniform'),
@@ -20,15 +20,15 @@ def tune_hyperparameters_qlearning(model_class, exploration_strategy_class, conf
     @use_named_args(space)
     def objective(learning_rate, discount_factor, epsilon):
         # Initialize environment
-        env = GymWrapper(gym.make('CustomCartPoleEnv-v1'))
+        env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))
         state_dim = env.env.observation_space.shape[0]
         action_dim = env.env.action_space.n
         exploration_strategy = exploration_strategy_class(epsilon=epsilon)
-        '''control_params = {
+        control_params = {
             'learning_rate': learning_rate,
             'discount_factor': discount_factor,
             'epsilon': epsilon
-        }'''
+        }
 
         config.CONTROL_PARAMS.update({
             'learning_rate': learning_rate,
@@ -40,10 +40,10 @@ def tune_hyperparameters_qlearning(model_class, exploration_strategy_class, conf
 
         controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
 
-        '''controller = model_class(
+        controller = model_class(
         control_params={'learning_rate': learning_rate, 'discount_factor': discount_factor},
         exploration_strategy=exploration_strategy
-        )'''
+        )
         
         total_reward = 0
         # Training loop (simplified for tuning purposes)
@@ -79,7 +79,70 @@ def tune_hyperparameters_qlearning(model_class, exploration_strategy_class, conf
     print(f"Learning Rate: {config.CONTROL_PARAMS['learning_rate']}")
     print(f"Discount Factor: {config.CONTROL_PARAMS['discount_factor']}")
     print(f"Epsilon: {config.CONTROL_PARAMS['epsilon']}")
-    print(f"Best Score: {-result.fun}")
+    print(f"Best Score: {-result.fun}")'''
+
+def tune_hyperparameters_qlearning(model_class, exploration_strategy_class, config):
+    space = [
+        Real(1e-5, 1e-1, name='learning_rate', prior='log-uniform'),
+        Real(0.8, 0.999, name='discount_factor'),
+        Real(0.95, 0.999, name='decay_rate') # Tune decay, not start epsilon
+    ]
+
+    @use_named_args(space)
+    def objective(learning_rate, discount_factor, decay_rate):
+        # Setup Env (Always use v0 for consistency)
+        env = GymWrapper(gym.make('CustomCartPoleEnv-v0'), mode=config.STATE_MODE)
+        eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0'), mode=config.STATE_MODE)
+        
+        # Force start epsilon to 1.0 for the decay to be meaningful
+        config.CONTROL_PARAMS.update({
+            'learning_rate': learning_rate,
+            'discount_factor': discount_factor,
+            'epsilon': 1.0, 
+            'decay_rate': decay_rate
+        })
+
+        exploration_strategy = exploration_strategy_class(epsilon=1.0)
+        controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
+
+        # --- Training Phase (Simplified) ---
+        for episode in range(200): # Fixed short episodes for tuning speed
+            state, _ = env.reset()
+            done = False
+            while not done:
+                action = controller.get_action(state)
+                next_state, reward, term, trunc, _ = env.step(action)
+                done = term or trunc
+                controller.update(state, action, reward, next_state, done)
+                state = next_state
+            controller.decay_epsilon() # Uses the tuned decay_rate
+
+        # --- Greedy Evaluation Phase (The Real Score) ---
+        eval_scores = []
+        for _ in range(10):
+            state, _ = eval_env.reset()
+            total_reward = 0
+            done = False
+            # Force greedy
+            temp_eps = controller.epsilon
+            controller.epsilon = 0.0 
+            while not done:
+                action = controller.get_action(state)
+                state, reward, term, trunc, _ = eval_env.step(action)
+                total_reward += reward
+                done = term or trunc
+            eval_scores.append(total_reward)
+            controller.epsilon = temp_eps
+
+        return -np.mean(eval_scores)
+
+    result = gp_minimize(objective, space, n_calls=30, random_state=42)
+    
+    # Update config with best results
+    best_params = {param.name: val for param, val in zip(space, result.x)}
+    config.CONTROL_PARAMS.update(best_params)
+    config.CONTROL_PARAMS['epsilon'] = 1.0 # Ensure main training starts at 1.0
+    return result
 
 '''def tune_hyperparameters_dqn(model_class, exploration_strategy_class, config):
     # Define the hyperparameter search space
@@ -271,7 +334,7 @@ def tune_hyperparameters_dqn(model_class, exploration_strategy_class, cfg):
     return result
 
 
-def tune_hyperparameters_sarsa(model_class, exploration_strategy_class, config):
+'''def tune_hyperparameters_sarsa(model_class, exploration_strategy_class, config):
     # Define the hyperparameter search space
     #space = [
      #   Real(1e-3, 1e-1, name='learning_rate', prior='log-uniform'),
@@ -288,12 +351,12 @@ def tune_hyperparameters_sarsa(model_class, exploration_strategy_class, config):
     @use_named_args(space)
     def objective(learning_rate, discount_factor, epsilon):
         # Initialize environment
-        env = GymWrapper(gym.make('CustomCartPoleEnv-v1'))
+        env = GymWrapper(gym.make('CustomCartPoleEnv-v0'))
         exploration_strategy = exploration_strategy_class(epsilon=epsilon)
         
         # Update config with the current hyperparameters
         config.CONTROL_PARAMS.update({
-            'learning_rate': learning_rate,
+            'learning_rate_sarsa': learning_rate,
             'discount_factor': discount_factor,
             'epsilon': epsilon
         })
@@ -327,7 +390,7 @@ def tune_hyperparameters_sarsa(model_class, exploration_strategy_class, config):
 
     # Update config with the best parameters
     config.CONTROL_PARAMS.update({
-        'learning_rate': result.x[0],
+        'learning_rate_sarsa': result.x[0],
         'discount_factor': result.x[1],
         'epsilon': result.x[2],
     })
@@ -336,5 +399,64 @@ def tune_hyperparameters_sarsa(model_class, exploration_strategy_class, config):
     print(f"Learning Rate: {config.CONTROL_PARAMS['learning_rate']}")
     print(f"Discount Factor: {config.CONTROL_PARAMS['discount_factor']}")
     print(f"Epsilon: {config.CONTROL_PARAMS['epsilon']}")
-    print(f"Best Score: {-result.fun}")
+    print(f"Best Score: {-result.fun}")'''
+
+def tune_hyperparameters_sarsa(model_class, exploration_strategy_class, config):
+    space = [
+        Real(1e-4, 1e-1, name='learning_rate_sarsa', prior='log-uniform'),
+        Real(0.9, 0.999, name='discount_factor'),
+        Real(0.95, 0.999, name='decay_rate')
+    ]
+
+    @use_named_args(space)
+    def objective(learning_rate_sarsa, discount_factor, decay_rate):
+        env = GymWrapper(gym.make('CustomCartPoleEnv-v0'), mode=config.STATE_MODE)
+        eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0'), mode=config.STATE_MODE)
+        
+        config.CONTROL_PARAMS.update({
+            'learning_rate_sarsa': learning_rate_sarsa,
+            'discount_factor': discount_factor,
+            'epsilon': 1.0,
+            'decay_rate': decay_rate
+        })
+
+        exploration_strategy = exploration_strategy_class(epsilon=1.0)
+        controller = model_class(config.CONTROL_PARAMS, exploration_strategy)
+
+        # Training
+        for episode in range(200):
+            state, _ = env.reset()
+            action = controller.get_action(state)
+            done = False
+            while not done:
+                next_state, reward, term, trunc, _ = env.step(action)
+                done = term or trunc
+                next_action = controller.get_action(next_state)
+                controller.update(state, action, reward, next_state, next_action, done)
+                state, action = next_state, next_action
+            controller.decay_epsilon()
+
+        # Greedy Evaluation
+        eval_scores = []
+        for _ in range(10):
+            state, _ = eval_env.reset()
+            total_reward, done = 0, False
+            temp_eps = controller.epsilon
+            controller.epsilon = 0.0
+            while not done:
+                action = controller.get_action(state)
+                state, reward, term, trunc, _ = eval_env.step(action)
+                total_reward += reward
+                done = term or trunc
+            eval_scores.append(total_reward)
+            controller.epsilon = temp_eps
+
+        return -np.mean(eval_scores)
+
+    result = gp_minimize(objective, space, n_calls=30, random_state=42)
+    
+    # Final Update
+    best_params = {param.name: val for param, val in zip(space, result.x)}
+    config.CONTROL_PARAMS.update(best_params)
+    return result
 
