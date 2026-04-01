@@ -1,7 +1,7 @@
 import numpy as np
 
 class EpsilonGreedyStrategy:
-    def __init__(self, epsilon=0.1):
+    def __init__(self, epsilon=1.0):
         self.epsilon = epsilon
 
     def select_action(self, q_values):

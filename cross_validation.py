@@ -171,7 +171,7 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
     env.close()
     return best_controller
 
-def train_dqn(model_class, exploration_strategy_class, config, session_dir):
+def train_dqn(model_class, exploration_strategy_class, config, session_dir, stop_logic=None):
     env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
                      mode=config.STATE_MODE, action_mode=config.ACTION_MODE)
     eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
@@ -184,8 +184,9 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir):
     logger = DataLogger(config.LOG_PARAMS, session_dir=session_dir)
 
     best_eval_reward = -np.inf
-    training_rewards = []
-    evaluation_rewards = []
+    best_window_avg = -np.inf
+    eval_window = []
+    num_episodes = config.NUM_EPISODES_DQN
 
     for episode in range(config.NUM_EPISODES_DQN):
         state, _ = env.reset()
@@ -207,11 +208,28 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir):
         if (episode + 1) % 10 == 0:
             eval_reward = evaluate_agent(controller, eval_env)
             logger.log_eval(episode + 1, eval_reward)
+
+            eval_window.append(eval_reward)
+            if len(eval_window) > 5: eval_window.pop(0)
+            current_window_avg = np.mean(eval_window)
+
             if eval_reward >= best_eval_reward:
                 best_eval_reward = eval_reward
                 joblib.dump({'model': controller, 'episode': episode}, os.path.join(session_dir, 'dqn_best_model.pkl'))
             
+                print(f"🎯 New Best Model Saved! Score: {eval_reward:.1f}")
+
+            if current_window_avg > best_window_avg:
+                best_window_avg = current_window_avg
+                print("Checking the best window")
+            
             print(f"Ep {episode+1}/{config.NUM_EPISODES_DQN} | Train: {episode_reward:.1f} | Eval: {eval_reward:.1f} | Eps: {controller.epsilon:.3f}")
+
+            if stop_logic == 'overfitting':
+                if best_window_avg > 100 and current_window_avg < (best_window_avg * 0.5):
+                    print(f"🛑 Overfitting/Divergence detected at episode {episode + 1}.")
+                    print(f"   Current Avg {current_window_avg:.2f} is < 50% of Best {best_window_avg:.2f}")
+                    break
 
     # Final Save
     joblib.dump({'model': controller, 'config': config.CONTROL_PARAMS}, os.path.join(session_dir, 'dqn_final_model.pkl'))
@@ -220,7 +238,7 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir):
     env.close()
     return controller
 
-def train_dqn_until_overfitting(model_class, exploration_strategy_class, config, max_episodes=1000, stop_logic='overfitting'):
+'''def train_dqn_until_overfitting(model_class, exploration_strategy_class, config, max_episodes=1000, stop_logic='overfitting'):
     env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
                      mode=config.STATE_MODE, 
                      action_mode=config.ACTION_MODE)
@@ -315,7 +333,7 @@ def train_dqn_until_overfitting(model_class, exploration_strategy_class, config,
     plot_rewards(training_rewards, evaluation_rewards, 10, save_path=save_path)
     logger.save_logs_as_csv(state='train')
     
-    return controller
+    return controller'''
 
 '''def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_folds=5):
     # Overall session tracking
@@ -651,7 +669,7 @@ def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
     if algorithm == 'qlearning':
         controller = train_qlearning(QLearningControl, EpsilonGreedyStrategy, config, session_dir)
     elif algorithm == 'dqn':
-        controller = train_dqn(DQNControl, EpsilonGreedyStrategy, config, session_dir)
+        controller = train_dqn(DQNControl, EpsilonGreedyStrategy, config, session_dir, stop_logic)
     elif algorithm == 'sarsa':
         # You would update train_sarsa similarly to accept session_dir
         controller = train_sarsa(SarsaControl, EpsilonGreedyStrategy, config, session_dir)

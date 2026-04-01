@@ -1,5 +1,6 @@
 STATE_MODE = '2D'  # Default
 STOP_LOGIC = 'fixed' # Default
+ACTION_MODE = 'discrete'
 STATE_DIM = 2
 
 # Simulation parameters
