@@ -10,22 +10,41 @@ import pandas as pd
 from gym_wrapper import GymWrapper
 from data_logger import DataLogger
 from exploration_strategies import EpsilonGreedyStrategy
+import json
 import os
 import datetime
 
-'''def create_session_folder(algorithm_name, config):
-    """Creates a unique directory for the current training session."""
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    folder_name = f"{algorithm_name}_{config.STATE_MODE}_{timestamp}"
-    
-    # Ensure the base Results directory exists
-    base_path = config.LOG_PARAMS['save_path']
-    session_dir = os.path.join(base_path, folder_name)
-    
-    os.makedirs(session_dir, exist_ok=True)
-    return session_dir'''
+def get_filtered_params(algorithm, cfg):
+    # 1. Define active keys for each algorithm
+    shared_keys = ['discount_factor', 'epsilon', 'decay_rate']
+    tabular_keys = ['num_bins', 'state_bounds']
 
-def create_session_folder(algorithm_name, config, tuned=False):
+    if algorithm.lower() == 'dqn':
+        active_keys = shared_keys + ['learning_rate', 'buffer_size', 'batch_size']
+        ep_key = "NUM_EPISODES_DQN"
+    
+    elif algorithm.lower() == 'qlearning':
+        active_keys = shared_keys + tabular_keys + ['learning_rate_qlearning']
+        ep_key = "NUM_EPISODES" # Q-Learning uses the generic key
+    
+    elif algorithm.lower() == 'sarsa':
+        active_keys = shared_keys + tabular_keys + ['learning_rate_sarsa']
+        ep_key = "NUM_EPISODES_SARSA"
+
+    params_dict = getattr(cfg, 'CONTROL_PARAMS', cfg)
+
+    # 2. Build the dictionary from CONTROL_PARAMS
+    filtered = {k: params_dict[k] for k in active_keys if k in params_dict}
+    
+    # 3. Add the global constraints (Max Steps and the specific Episode count)
+    filtered['max_steps'] = config.MAX_STEPS
+    
+    # Fetch the episode value from the top-level config object
+    filtered['total_episodes'] = getattr(config, ep_key, "Not Found")
+    
+    return filtered
+
+def create_session_folder(algorithm_name, config, stop_logic=None, tuned=False):
     """Creates a unique directory with tuning and action mode flags."""
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     
@@ -36,7 +55,11 @@ def create_session_folder(algorithm_name, config, tuned=False):
     if algorithm_name.lower() == 'dqn':
         # Shortening to 'Disc' or 'Cont' keeps folder names from getting too long
         act_suffix = "Disc" if config.ACTION_MODE == 'discrete' else "Cont"
-        folder_name = f"{algorithm_name}_{act_suffix}_{config.STATE_MODE}_{tuning_status}_{timestamp}"
+
+        stop_suffix = stop_logic if stop_logic else "Full"
+        
+        folder_name = f"{algorithm_name}_{act_suffix}_{config.STATE_MODE}_{stop_suffix}_{tuning_status}_{timestamp}"
+        #folder_name = f"{algorithm_name}_{act_suffix}_{config.STATE_MODE}_{tuning_status}_{timestamp}"
     else:
         folder_name = f"{algorithm_name}_{config.STATE_MODE}_{tuning_status}_{timestamp}"
     
@@ -204,7 +227,7 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
     env.close()
     return best_controller
 
-def train_dqn(model_class, exploration_strategy_class, config, session_dir, stop_logic=None):
+def train_dqn(model_class, exploration_strategy_class, config, session_dir, stop_logic):
     env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
                      mode=config.STATE_MODE, action_mode=config.ACTION_MODE)
     eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
@@ -215,6 +238,22 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir, stop
 
     controller = model_class(config.CONTROL_PARAMS, exploration_strategy_class(config.CONTROL_PARAMS['epsilon']), state_dim, action_dim)
     logger = DataLogger(config.LOG_PARAMS, session_dir=session_dir)
+
+    filtered_params = get_filtered_params('dqn', config.CONTROL_PARAMS)
+    
+    initial_setup = {
+    "algorithm": "DQN",
+    "parameters": config.CONTROL_PARAMS,
+    "state_mode": config.STATE_MODE,
+    "action_mode": config.ACTION_MODE,
+    "total_episodes": config.NUM_EPISODES_DQN,
+    "stop_logic": stop_logic
+    }
+
+    with open(os.path.join(session_dir, "initial_params.json"), "w") as f:
+        json.dump(initial_setup, f, indent=4)
+
+    print(f"📝 Hyperparameters logged to {session_dir}/initial_params.json")
 
     best_eval_reward = -np.inf
     best_window_avg = -np.inf
@@ -689,15 +728,15 @@ def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path)
     plt.savefig(os.path.join(save_path, 'learning_curve.png'))
     plt.close()
 
-def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic):
+def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic, was_tuned=False):
     config.STATE_MODE = mode
     config.STOP_LOGIC = stop_logic
     config.ACTION_MODE = action_mode
     config.STATE_DIM = 2 if mode == '2D' else 4
 
     # Create the session directory here
-    session_dir = create_session_folder(algorithm_name=algorithm, config=config, tuned=was_tuned)
-    print(f"\n🚀 Starting {algorithm.upper()} | Mode: {mode} | Folder: {session_dir}")
+    session_dir = create_session_folder(algorithm_name=algorithm, config=config, stop_logic=stop_logic, tuned=was_tuned)
+    print(f"\n🚀 Starting {algorithm.upper()} | Mode: {mode} | Tuned: {was_tuned} | Folder: {session_dir}")
 
     if algorithm == 'qlearning':
         controller = train_qlearning(QLearningControl, EpsilonGreedyStrategy, config, session_dir)
