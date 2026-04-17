@@ -1,0 +1,47 @@
+{
+    "algorithm": "DQN",
+    "parameters": {
+        "learning_rate": 0.001,
+        "learning_rate_qlearning": 0.03,
+        "learning_rate_sarsa": 0.03,
+        "discount_factor": 0.99,
+        "epsilon": 1.0,
+        "min_epsilon": 0.01,
+        "decay_rate": 0.995,
+        "buffer_size": 10000,
+        "batch_size": 64,
+        "update_target_steps": 1000,
+        "patience": 100,
+        "min_delta": 0.05,
+        "decay_factor": 0.5,
+        "min_lr": 0.001,
+        "num_bins": [
+            12,
+            12,
+            12,
+            12
+        ],
+        "state_bounds": [
+            [
+                -2.4,
+                2.4
+            ],
+            [
+                -3.0,
+                3.0
+            ],
+            [
+                -0.418,
+                0.418
+            ],
+            [
+                -3.5,
+                3.5
+            ]
+        ]
+    },
+    "state_mode": "4D",
+    "action_mode": "discrete",
+    "total_episodes": 1000,
+    "stop_logic": "fixed"
+}

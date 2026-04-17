@@ -104,7 +104,7 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
     init_lr = config.CONTROL_PARAMS['learning_rate_qlearning']
     init_eps = config.CONTROL_PARAMS['epsilon']
 
-    params_to_save = {
+    '''params_to_save = {
         "ALGORITHM": "DQN",
         "ACTION_MODE": config.ACTION_MODE,
         "STATE_MODE": config.STATE_MODE,
@@ -114,8 +114,25 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
     with open(os.path.join(session_dir, "initial_params.json"), "w") as f:
         json.dump(params_to_save, f, indent=4)
     print(f"📝 Initial Parameters Saved to: {session_dir}/initial_params.json")
+    print(f"🚀 Initial Params | LR: {init_lr} | Start Epsilon: {init_eps}")'''
+
+    filtered_params = get_filtered_params('qlearning', config)
     
-    print(f"🚀 Initial Params | LR: {init_lr} | Start Epsilon: {init_eps}")
+    initial_setup = {
+        "algorithm": "Q-Learning",
+        "parameters": filtered_params,
+        "state_mode": config.STATE_MODE,
+        "action_mode": "discrete",  # Always discrete for tabular
+        "stop_logic": "fixed"
+    }
+
+    with open(os.path.join(session_dir, "initial_params.json"), "w") as f:
+        json.dump(initial_setup, f, indent=4)
+    
+    print(f"\n" + "="*50)
+    print(f"🚀 INITIALIZING Q-LEARNING TRAINING")
+    print(f"   Episodes: {filtered_params['total_episodes']} | Mode: {config.STATE_MODE}")
+    print("="*50 + "\n")
     
     for fold in range(k_folds):
         best_eval_in_fold = -np.inf
@@ -243,7 +260,7 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir, stop
     
     initial_setup = {
     "algorithm": "DQN",
-    "parameters": config.CONTROL_PARAMS,
+    "parameters": filtered_params,
     "state_mode": config.STATE_MODE,
     "action_mode": config.ACTION_MODE,
     "total_episodes": config.NUM_EPISODES_DQN,
@@ -543,6 +560,25 @@ def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_
     best_logger_data = None
 
     init_lr = config.CONTROL_PARAMS['learning_rate_sarsa']
+
+    filtered_params = get_filtered_params('sarsa', config)
+    
+    initial_setup = {
+        "algorithm": "SARSA",
+        "parameters": filtered_params,
+        "state_mode": config.STATE_MODE,
+        "action_mode": "discrete",
+        "stop_logic": "fixed"
+    }
+
+    with open(os.path.join(session_dir, "initial_params.json"), "w") as f:
+        json.dump(initial_setup, f, indent=4)
+
+    # --- START OF RUN HEADER ---
+    print(f"\n" + "="*50)
+    print(f"🚀 INITIALIZING SARSA TRAINING")
+    print(f"   Episodes: {filtered_params['total_episodes']} | Mode: {config.STATE_MODE}")
+    print("="*50 + "\n")
 
     for fold in range(k_folds):
         print(f"\n--- Fold {fold+1}/{k_folds} | Session: {os.path.basename(session_dir)} ---")
