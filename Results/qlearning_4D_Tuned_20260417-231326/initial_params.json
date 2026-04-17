@@ -1,0 +1,38 @@
+{
+    "algorithm": "Q-Learning",
+    "parameters": {
+        "discount_factor": 0.8001549744023619,
+        "epsilon": 1.0,
+        "decay_rate": 0.9986183664052697,
+        "num_bins": [
+            12,
+            12,
+            12,
+            12
+        ],
+        "state_bounds": [
+            [
+                -2.4,
+                2.4
+            ],
+            [
+                -3.0,
+                3.0
+            ],
+            [
+                -0.418,
+                0.418
+            ],
+            [
+                -3.5,
+                3.5
+            ]
+        ],
+        "learning_rate_qlearning": 0.03,
+        "max_steps": 500,
+        "total_episodes": 2000
+    },
+    "state_mode": "4D",
+    "action_mode": "discrete",
+    "stop_logic": "fixed"
+}
