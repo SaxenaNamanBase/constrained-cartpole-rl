@@ -1,3 +1,5 @@
+// File to be used in case of Arduino Nano with changes needed to be made according to setup.
+
 #define CLK 4  // Pin connected to CLK (A) on the encoder
 #define DT 5   // Pin connected to DT (B) on the encoder
 #define IN1 2  // IN1 on L298N
