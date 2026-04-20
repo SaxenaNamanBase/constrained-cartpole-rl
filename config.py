@@ -1,5 +1,5 @@
-STATE_MODE = '2D'  # Default
-STOP_LOGIC = 'fixed' # Default
+STATE_MODE = '2D'
+STOP_LOGIC = 'fixed'
 ACTION_MODE = 'discrete'
 STATE_DIM = 2
 
@@ -10,7 +10,7 @@ NUM_EPISODES_DQN = 1000
 NUM_EPISODES_SARSA=2000
 MAX_STEPS = 500
 
-# Control algorithm parameters
+# Control algorithm parameters and early stopping
 
 CONTROL_PARAMS = {
     'learning_rate': 0.001,
@@ -44,12 +44,7 @@ LOG_PARAMS = {
 
 # Hardware interface parameters (when using real hardware)
 HARDWARE_PARAMS = {
-    'motor_pins': [18, 23],  # Example GPIO pins
+    'motor_pins': [18, 23],  #
     'encoder_pins': [24, 25],
     'update_frequency': 50  # Hz
-}
-
-EARLY_STOPPING = {
-    'patience': 10,  # Number of episodes with no improvement after which training will be stopped
-    'min_delta': 1e-5  # Minimum change to consider as an improvement
 }

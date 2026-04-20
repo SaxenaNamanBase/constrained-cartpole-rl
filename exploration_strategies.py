@@ -12,6 +12,7 @@ class EpsilonGreedyStrategy:
             # Exploitation: choose the action with the highest Q-value
             return np.argmax(q_values)
 
+# Code for the Softmax not integrated directly, need to make changes to use this
 class SoftmaxStrategy:
     def __init__(self, temperature=1.0):
         self.temperature = temperature

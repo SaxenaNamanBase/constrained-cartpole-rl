@@ -15,7 +15,7 @@ import os
 import datetime
 
 def get_filtered_params(algorithm, cfg):
-    # 1. Define active keys for each algorithm
+    # Define active keys for each algorithm
     shared_keys = ['discount_factor', 'epsilon', 'decay_rate']
     tabular_keys = ['num_bins', 'state_bounds']
 
@@ -33,10 +33,8 @@ def get_filtered_params(algorithm, cfg):
 
     params_dict = getattr(cfg, 'CONTROL_PARAMS', cfg)
 
-    # 2. Build the dictionary from CONTROL_PARAMS
+    # Build the dictionary from CONTROL_PARAMS
     filtered = {k: params_dict[k] for k in active_keys if k in params_dict}
-    
-    # 3. Add the global constraints (Max Steps and the specific Episode count)
     filtered['max_steps'] = config.MAX_STEPS
     
     # Fetch the episode value from the top-level config object
@@ -45,13 +43,13 @@ def get_filtered_params(algorithm, cfg):
     return filtered
 
 def create_session_folder(algorithm_name, config, stop_logic=None, tuned=False):
-    """Creates a unique directory with tuning and action mode flags."""
+    # Creates a unique directory with tuning and action mode flags.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     
-    # 1. Determine Tuning Prefix
+    # Determine Tuning Prefix
     tuning_status = "Tuned" if tuned else "Default"
     
-    # 2. Handle DQN Specifics (Action Mode)
+    # Handle DQN Specifics (Action Mode)
     if algorithm_name.lower() == 'dqn':
         # Shortening to 'Disc' or 'Cont' keeps folder names from getting too long
         act_suffix = "Disc" if config.ACTION_MODE == 'discrete' else "Cont"
@@ -59,7 +57,6 @@ def create_session_folder(algorithm_name, config, stop_logic=None, tuned=False):
         stop_suffix = stop_logic if stop_logic else "Full"
         
         folder_name = f"{algorithm_name}_{act_suffix}_{config.STATE_MODE}_{stop_suffix}_{tuning_status}_{timestamp}"
-        #folder_name = f"{algorithm_name}_{act_suffix}_{config.STATE_MODE}_{tuning_status}_{timestamp}"
     else:
         folder_name = f"{algorithm_name}_{config.STATE_MODE}_{tuning_status}_{timestamp}"
     
@@ -75,7 +72,7 @@ def performance_based_lr_update(episode, recent_rewards, control_params, current
     patience = control_params.get('patience', 100)
     min_delta = control_params.get('min_delta', 0.01)
     decay_factor = control_params.get('decay_factor', 0.5)
-    min_lr = control_params.get('min_lr', 1e-3) # Default to 0.001 if missing
+    min_lr = control_params.get('min_lr', 1e-3)
 
     if episode > 0 and episode % patience == 0:
         if len(recent_rewards) >= patience * 2:
@@ -101,23 +98,13 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
     win_final_lr = 0
     win_final_eps = 0
 
+    # Getting params for display purposes
     init_lr = config.CONTROL_PARAMS['learning_rate_qlearning']
     init_eps = config.CONTROL_PARAMS['epsilon']
 
-    '''params_to_save = {
-        "ALGORITHM": "DQN",
-        "ACTION_MODE": config.ACTION_MODE,
-        "STATE_MODE": config.STATE_MODE,
-        "STOP_LOGIC": str(stop_logic),
-        "CONTROL_PARAMS": config.CONTROL_PARAMS
-    }
-    with open(os.path.join(session_dir, "initial_params.json"), "w") as f:
-        json.dump(params_to_save, f, indent=4)
-    print(f"📝 Initial Parameters Saved to: {session_dir}/initial_params.json")
-    print(f"🚀 Initial Params | LR: {init_lr} | Start Epsilon: {init_eps}")'''
-
     filtered_params = get_filtered_params('qlearning', config)
-    
+
+    # Getting params for saving in JSON files
     initial_setup = {
         "algorithm": "Q-Learning",
         "parameters": filtered_params,
@@ -134,6 +121,7 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
     print(f"   Episodes: {filtered_params['total_episodes']} | Mode: {config.STATE_MODE}")
     print("="*50 + "\n")
     
+    # Setting up folds
     for fold in range(k_folds):
         best_eval_in_fold = -np.inf
         peak_episode_in_fold = 0
@@ -152,6 +140,8 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
         logger = DataLogger(config.LOG_PARAMS, session_dir=session_dir)
 
         recent_rewards = []
+
+        # Training
         for episode in range(config.NUM_EPISODES):
             state, _ = env.reset()
             episode_reward = 0
@@ -181,21 +171,14 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
                 if eval_reward >= best_eval_in_fold:
                     best_eval_in_fold = eval_reward
                     peak_episode_in_fold = episode + 1
-                    #fold_model_path = os.path.join(session_dir, f'temp_fold_{fold+1}_best.pkl')
-                    #joblib.dump(controller, fold_model_path)
                     session_champion_brain = copy.deepcopy(controller)
 
-            # PERFORMANCE-BASED LR UPDATE
-            #new_lr = performance_based_lr_update(episode, recent_rewards, config.CONTROL_PARAMS, current_lr)
-            #if new_lr != current_lr:
-                #controller.update_learning_rate(new_lr)
-                #current_lr = new_lr
-
+            # Decreasing LR based on performance
             current_lr = performance_based_lr_update(episode, recent_rewards, config.CONTROL_PARAMS, current_lr)
             if current_lr != controller.learning_rate:
                 controller.update_learning_rate(current_lr)
 
-        # FOLD SUMMARY
+        # Fold Summary
         avg_reward = logger.get_average_reward()
         final_fold_lr = current_lr
         final_fold_eps = controller.epsilon
@@ -206,12 +189,13 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
         print(f"   - Final LR: {final_fold_lr:.6f}")
         print(f"   - Final Epsilon: {final_fold_eps:.4f}")
 
+        # Saving final model after each fold
         fold_final_path = os.path.join(session_dir, f'qlearning_fold_{fold+1}_final.pkl')
         joblib.dump({'model': controller, 'config': config.CONTROL_PARAMS}, fold_final_path)
         
         print(f" Fold {fold+1} Finished. Final model saved to: {os.path.basename(fold_final_path)}")
 
-        # UPDATE OVERALL SESSION WINNER
+        # Update overall winner
         if avg_reward > best_avg_reward:
             best_avg_reward = avg_reward
             winning_fold = fold + 1
@@ -220,10 +204,10 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
             win_final_eps = final_fold_eps
             best_logger_data = logger
             # Load the peak version of the winner
-            #best_controller = joblib.load(os.path.join(session_dir, f'temp_fold_{fold+1}_best.pkl'))
             best_controller = session_champion_brain
 
     # FINAL CHAMPION SUMMARY
+    # Saving the best model out of each episode and all folds.
     if best_logger_data is not None:
         print(f"\n")
         print(f" SESSION WINNER: Fold {winning_fold}")
@@ -245,6 +229,8 @@ def train_qlearning(model_class, exploration_strategy_class, config, session_dir
     return best_controller
 
 def train_dqn(model_class, exploration_strategy_class, config, session_dir, stop_logic):
+    
+    # Environment Setup
     env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
                      mode=config.STATE_MODE, action_mode=config.ACTION_MODE)
     eval_env = GymWrapper(gym.make('CustomCartPoleEnv-v0', action_mode=config.ACTION_MODE), 
@@ -256,6 +242,7 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir, stop
     controller = model_class(config.CONTROL_PARAMS, exploration_strategy_class(config.CONTROL_PARAMS['epsilon']), state_dim, action_dim)
     logger = DataLogger(config.LOG_PARAMS, session_dir=session_dir)
 
+    # Getting params for saving in JSON file
     filtered_params = get_filtered_params('dqn', config.CONTROL_PARAMS)
     
     initial_setup = {
@@ -277,6 +264,7 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir, stop
     eval_window = []
     num_episodes = config.NUM_EPISODES_DQN
 
+    # Traning block
     for episode in range(config.NUM_EPISODES_DQN):
         state, _ = env.reset()
         episode_reward = 0
@@ -291,10 +279,14 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir, stop
             episode_reward += reward
             t += 1
 
+        # Decaying after each episode
         controller.decay_epsilon()
         logger.log_episode(episode + 1, episode_reward, t, epsilon=controller.epsilon)
 
+        # Calculations after 10 episodes
         if (episode + 1) % 10 == 0:
+
+            # Calculating the evaluation values
             eval_reward = evaluate_agent(controller, eval_env)
             logger.log_eval(episode + 1, eval_reward)
 
@@ -302,6 +294,7 @@ def train_dqn(model_class, exploration_strategy_class, config, session_dir, stop
             if len(eval_window) > 5: eval_window.pop(0)
             current_window_avg = np.mean(eval_window)
 
+            # Saving the best model
             if eval_reward >= best_eval_reward:
                 best_eval_reward = eval_reward
                 joblib.dump({'model': controller, 'episode': episode}, os.path.join(session_dir, 'dqn_best_model.pkl'))
@@ -338,6 +331,7 @@ def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_
     best_avg_reward = -np.inf
     best_logger_data = None
 
+    # Getting params for saving in JSON file
     init_lr = config.CONTROL_PARAMS['learning_rate_sarsa']
 
     filtered_params = get_filtered_params('sarsa', config)
@@ -353,7 +347,7 @@ def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_
     with open(os.path.join(session_dir, "initial_params.json"), "w") as f:
         json.dump(initial_setup, f, indent=4)
 
-    # --- START OF RUN HEADER ---
+    # Start of run header
     print(f"\n" + "="*50)
     print(f"🚀 INITIALIZING SARSA TRAINING")
     print(f"   Episodes: {filtered_params['total_episodes']} | Mode: {config.STATE_MODE}")
@@ -380,6 +374,7 @@ def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_
         peak_episode_in_fold = 0
         best_eval_in_fold = -np.inf
 
+        # Block for each episode
         for episode in range(config.NUM_EPISODES_SARSA):
             state, _ = env.reset()
             action = controller.get_action(state)  # SARSA: Select initial action
@@ -401,22 +396,18 @@ def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_
 
                 if done: break
 
-            # 1. Decay Epsilon & Update LR
+            # Decay Epsilon & Update LR
             controller.decay_epsilon()
-            #current_lr = performance_based_lr_update(
-                #episode + 1, recent_rewards,
-                #config.CONTROL_PARAMS, current_lr
-            #)
-            # Update the controller's internal alpha/learning rate
+
             current_lr = performance_based_lr_update(episode + 1, recent_rewards, config.CONTROL_PARAMS, current_lr)
             controller.alpha = current_lr
 
-            # 2. Logging
+            # Logging
             logger.log_episode(episode + 1, episode_reward, t + 1,
                                epsilon=controller.epsilon, lr=current_lr)
             recent_rewards.append(episode_reward)
 
-            # 3. Evaluation Block (Periodic)
+            # Evaluation Block (Periodic)
             if (episode + 1) % 20 == 0:
                 eval_reward = evaluate_agent(controller, eval_env)
                 logger.log_eval(episode + 1, eval_reward)
@@ -432,7 +423,6 @@ def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_
                     winning_episode = episode + 1
                     session_champion_brain = copy.deepcopy(controller)
 
-        # --- END OF FOLD ---
         avg_reward = logger.get_average_reward()
 
         print(f"✅ Fold {fold+1} Finished")
@@ -454,7 +444,7 @@ def train_sarsa(model_class, exploration_strategy_class, config, session_dir, k_
             final_fold_lr = current_lr
             final_fold_eps = controller.epsilon
 
-    # --- FINAL SESSION SUMMARY ---
+    # Final session summary
     if best_logger_data is not None:
         print(f"\n🏆 SARSA SESSION WINNER: Fold {winning_fold}")
 
@@ -502,16 +492,15 @@ def plot_rewards_from_csv(session_dir, csv_filename):
     df = pd.read_csv(csv_path)
     plt.figure(figsize=(12, 6))
     
-    # 1. Plot Training Rewards (Light blue background)
+    # Plot Training Rewards (Light blue background)
     plt.plot(df['episode'], df['reward'], label='Training Reward (Raw)', alpha=0.3, color='#3498db')
     
-    # 2. Plot Moving Average (The trendline)
+    # Plot Moving Average (The trendline)
     if len(df) > 20:
         df['smooth'] = df['reward'].rolling(window=20).mean()
         plt.plot(df['episode'], df['smooth'], label='Trend (20-Ep MA)', color='#2980b9', linewidth=2)
 
-    # 3. Plot Evaluation Rewards (Distinct dots)
-    # This checks if the column exists and has data
+    # Plot Evaluation Rewards (Distinct dots)
     if 'eval_reward' in df.columns:
         # Filter rows where eval_reward is not empty
         eval_data = df.dropna(subset=['eval_reward'])
@@ -530,19 +519,6 @@ def plot_rewards_from_csv(session_dir, csv_filename):
     plt.savefig(os.path.join(session_dir, plot_name))
     plt.show()
 
-def plot_rewards(training_rewards, evaluation_rewards, eval_interval, save_path):
-    plt.figure(figsize=(12, 6))
-    plt.plot(training_rewards, label='Training Reward', alpha=0.6)
-    if evaluation_rewards:
-        eval_episodes = list(range(eval_interval, (len(evaluation_rewards)*eval_interval) + 1, eval_interval))
-        plt.plot(eval_episodes, evaluation_rewards, label='Evaluation Reward', color='red', linewidth=2)
-    plt.title('Training Performance')
-    plt.xlabel('Episode')
-    plt.ylabel('Reward')
-    plt.legend()
-    plt.savefig(os.path.join(save_path, 'learning_curve.png'))
-    plt.close()
-
 def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic, was_tuned=False):
     config.STATE_MODE = mode
     config.STOP_LOGIC = stop_logic
@@ -558,31 +534,6 @@ def run_cross_validation_or_training(algorithm, mode, action_mode, stop_logic, w
     elif algorithm == 'dqn':
         controller = train_dqn(DQNControl, EpsilonGreedyStrategy, config, session_dir, stop_logic)
     elif algorithm == 'sarsa':
-        # You would update train_sarsa similarly to accept session_dir
         controller = train_sarsa(SarsaControl, EpsilonGreedyStrategy, config, session_dir)
     
     return controller
-
-
-def plot_sarsa_training(logger, config, save_path=None):
-    episodes = range(len(logger.episode_rewards))
-
-    # Calculate Rolling Average of Rewards (e.g., over the last 100 episodes)
-    window_size = 100
-    rolling_avg = [sum(logger.episode_rewards[i:i+window_size]) / window_size 
-                   for i in range(len(logger.episode_rewards) - window_size + 1)]
-
-    # Plot Training Rewards and Rolling Average in a single plot
-    plt.figure(figsize=(12, 6))
-    
-    plt.plot(episodes, logger.episode_rewards, label='Training Reward', color='blue')
-    plt.plot(episodes[:len(rolling_avg)], rolling_avg, label=f'Average Reward (last {window_size} episodes)', color='red')
-    
-    plt.xlabel('Episode')
-    plt.ylabel('Reward')
-    plt.title('SARSA Training and Average Reward Over Time')
-    plt.legend()
-    if save_path:
-        plot_path = os.path.join(save_path, 'training_plot.png')
-        plt.savefig(plot_path)
-    plt.show()

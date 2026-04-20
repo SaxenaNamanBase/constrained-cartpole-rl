@@ -11,13 +11,12 @@ register(
     max_episode_steps=500,
 )
 
+# Custom environment to be able to change the conditions to test algorithms.
 class CustomCartPoleEnv(gym.Env):
     def __init__(self, action_mode='discrete', render_mode=None):
         super(CustomCartPoleEnv, self).__init__()
         self.render_mode = render_mode
         self.action_mode = action_mode
-        # Define action space (continuous motor speed, e.g., from -1.0 to 1.0)
-        #self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
 
         self.metadata = {"render_modes": ["rgb_array", "human"], "render_fps": 50}
 
@@ -33,7 +32,8 @@ class CustomCartPoleEnv(gym.Env):
                                                 high=np.array([2.4, np.inf, 0.418, np.inf]),
                                                 dtype=np.float32)
         
-        # Environment constants (copied from your original code)
+        # Environment constants for uses outside the environment if needed
+        # There for experimental uses only for now
         self.gravity = 9.8
         self.masscart = 1.0
         self.masspole = 0.1
@@ -49,7 +49,6 @@ class CustomCartPoleEnv(gym.Env):
         self.step_count = 0
 
     def step(self, action):
-        #motor_speed = action
 
         if self.action_mode == 'discrete':
             # Map 0 -> -1.0 (Full Left) and 1 -> 1.0 (Full Right)
@@ -95,7 +94,6 @@ class CustomCartPoleEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.state = np.random.uniform(low=-0.05, high=0.05, size=(4,))
-        #self.steps_beyond_done = None
         self.step_count = 0
         return np.array(self.state, dtype=np.float32), {}
 
@@ -103,7 +101,6 @@ class CustomCartPoleEnv(gym.Env):
         return None
 
     def close(self):
-        # Your close logic here
         pass
 
 # The wrapper class
@@ -114,8 +111,7 @@ class GymWrapper:
         self.mode = mode
         self.action_mode= action_mode
         
-        # We need to define a proper Gymnasium Box space so 
-        # that the agents can "read" the limits and shape.
+        # Defining the proper ranges for different modes
         if self.mode == '2D':
             # Angle and Angular Velocity limits
             low = np.array([-0.418, -np.inf], dtype=np.float32)
@@ -126,8 +122,8 @@ class GymWrapper:
             high = np.array([2.4, np.inf, 0.418, np.inf], dtype=np.float32)
             
         self.observation_space = gym.spaces.Box(low=low, high=high, dtype=np.float32)
-        #self.action_space = self.env.action_space
-        # 2. Define Action Space (Output)
+
+        # Define Action Space (Output)
         if self.action_mode == 'discrete':
             # This tells Q-Learning/SARSA/DQN there are 2 choices: 0 and 1
             self.action_space = gym.spaces.Discrete(2)
@@ -146,23 +142,18 @@ class GymWrapper:
         return self._filter_state(state), info
 
     def step(self, action):
-      # 1. HANDLE INPUT FROM AGENT
-      # Agents often return actions as numpy arrays or tensors; we need the raw value.
+      # Handle input from agent
       if isinstance(action, (np.ndarray, torch.Tensor)):
           action_val = action.item()
       else:
           action_val = action
 
-      # 2. FORMAT FOR YOUR CUSTOM ENV
       if self.action_mode == 'discrete':
-          # If your custom env expects 0 or 1:
           act_for_env = int(action_val)
       else:
-          # If your custom env expects a float between -1 and 1:
-          # This ensures it's a float32, which Gymnasium prefers for Box spaces
           act_for_env = np.array([float(action_val)], dtype=np.float32)
 
-      # 3. EXECUTE STEP
+      # Execution
       try:
           next_state, reward, terminated, truncated, info = self.env.step(act_for_env)
       except AssertionError as e:
@@ -172,7 +163,7 @@ class GymWrapper:
           else:
               raise e
 
-      # 4. FILTER AND RETURN
+      # Filter and Return
       return self._filter_state(next_state), reward, terminated, truncated, info
 
     def render(self):

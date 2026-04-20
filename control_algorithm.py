@@ -33,12 +33,11 @@ class DQNNetwork(nn.Module):
         self.fc3 = nn.Linear(128, output_dim)
 
     def forward(self, x):
-        x = torch.relu(self.fc1(x)) ###
+        x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
-        #return torch.tanh(self.fc3(x))
         return self.fc3(x)
 
-# 2. Define the Replay Buffer class
+# Defining the Replay Buffer class
 class ReplayBuffer:
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
@@ -52,8 +51,6 @@ class ReplayBuffer:
     def size(self):
         return len(self.buffer)
 
-# Continue with your other classes like QLearningControl or DQNControl
-# 3. Define the DQNControl class (As described in the previous step)
 class DQNControl(ControlAlgorithm):
     def __init__(self, control_params, exploration_strategy, state_dim, action_dim):
         super().__init__(control_params, exploration_strategy)
@@ -67,21 +64,21 @@ class DQNControl(ControlAlgorithm):
         self.gamma = control_params['discount_factor']
         self.epsilon = control_params['epsilon']
         self.min_epsilon = control_params.get('min_epsilon', 0.01)
-        self.input_dim = state_dim        ############  
+        self.input_dim = state_dim
         self.decay_rate = control_params.get('decay_rate', 0.995)
         self.update_target_steps = control_params.get('update_target_steps', 1000)
         self.steps = 0
         self.model = DQNNetwork(state_dim, action_dim)
 
     def get_action(self, state, explore=True):
-        """Decide action based on exploration or exploitation."""
+        # Decide action based on exploration or exploitation.
         if explore and np.random.rand() < self.epsilon:
             # Exploration: random action
             return np.random.choice(self.q_network.fc3.out_features)
         else:
             # Exploitation: best action
             try:
-                # FIX: Flatten the array to ensure it is always 1D (e.g., shape (2,))
+                # Flattening the array to ensure it is always 1D
                 state_array = np.array(state, dtype=object)
                 state_array = state_array.flatten().astype(np.float32) 
                 
@@ -89,7 +86,7 @@ class DQNControl(ControlAlgorithm):
                 if state_array.size == 0:
                     raise ValueError("State array is empty or malformed.")
                 
-                # Secondary check: ensure the state has the expected input size (2 for CartPole)
+                # Secondary check: ensuring the state has the expected input size (2 for CartPole)
                 if state_array.shape[0] != self.input_dim:
                     raise ValueError(f"State array has incorrect size after flattening: {state_array.shape}")
                     
@@ -98,7 +95,7 @@ class DQNControl(ControlAlgorithm):
                     q_values = self.q_network(state_tensor)
                 return q_values.argmax().item()
             except Exception as e:
-                # If anything goes wrong, fall back to exploration (random action)
+                # If anything goes wrong, fallig back to exploration (random action)
                 print(f"Warning: Failed to get best action (Error: {e}). Falling back to random action. State: {state}.")
                 # Fallback action
                 return np.random.choice(self.q_network.fc3.out_features)
@@ -116,15 +113,13 @@ class DQNControl(ControlAlgorithm):
         states, actions, rewards, next_states, dones = zip(*experiences)
 
 
-        states = [np.asarray(s, dtype=np.float32) for s in states]      #############
-        next_states = [np.asarray(s, dtype=np.float32) for s in next_states]   ############
+        states = [np.asarray(s, dtype=np.float32) for s in states]
+        next_states = [np.asarray(s, dtype=np.float32) for s in next_states]
 
         # Convert to torch tensors
-        #states = torch.tensor(states, dtype=torch.float32)
         states = torch.tensor(np.stack(states), dtype=torch.float32)
         actions = torch.tensor(actions, dtype=torch.int64)
         rewards = torch.tensor(rewards, dtype=torch.float32)
-        #next_states = torch.tensor(next_states, dtype=torch.float32)
         next_states = torch.tensor(np.stack(next_states), dtype=torch.float32)
         dones = torch.tensor(dones, dtype=torch.float32)
 
@@ -142,22 +137,21 @@ class DQNControl(ControlAlgorithm):
         # Compute loss
         loss = self.criterion(current_q_values, target_q_values)
 
-        self.last_loss = loss.item()            ##############################
-        self.avg_q = current_q_values.mean().item()          ###########################
+        self.last_loss = loss.item()
+        self.avg_q = current_q_values.mean().item()
 
         # Perform gradient descent
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-        # Update the target network periodically
+        # Updating the target network periodically
         if self.steps % self.update_target_steps == 0:
             self.target_network.load_state_dict(self.q_network.state_dict())
 
         self.steps += 1
 
     def decay_epsilon(self):
-        """Decay the epsilon value over time."""
         self.epsilon = max(self.min_epsilon, self.epsilon * self.decay_rate)
     
     def _discretize_state(self, state):
@@ -168,7 +162,7 @@ class QLearningControl(ControlAlgorithm):
     def __init__(self, control_params, exploration_strategy):
         super().__init__(control_params, exploration_strategy)
         self.q_table = {}
-        self.learning_rate = control_params['learning_rate_qlearning']    ##########
+        self.learning_rate = control_params['learning_rate_qlearning']
         self.epsilon = control_params['epsilon']
         self.min_epsilon = control_params.get('min_epsilon', 0.01)
         self.decay_rate = control_params.get('decay_rate', 0.995)
@@ -190,21 +184,6 @@ class QLearningControl(ControlAlgorithm):
 
         return action
 
-    '''def update(self, state, action, reward, next_state, done):
-        state = self._discretize_state(state)
-        next_state = self._discretize_state(next_state)
-        
-        if state not in self.q_table:
-            self.q_table[state] = [0, 0]
-        if next_state not in self.q_table:
-            self.q_table[next_state] = [0, 0]
-        
-        current_q = self.q_table[state][action]
-        max_next_q = np.max(self.q_table[next_state])
-        
-        #new_q = current_q + self.params['learning_rate'] * (reward + self.params['discount_factor'] * max_next_q - current_q)
-        new_q = current_q + self.learning_rate * (reward + self.params['discount_factor'] * max_next_q - current_q)
-        self.q_table[state][action] = new_q'''
     def update(self, state, action, reward, next_state, done):
         state_d = self._discretize_state(state)
         next_state_d = self._discretize_state(next_state)
@@ -222,39 +201,17 @@ class QLearningControl(ControlAlgorithm):
         self.q_table[state_d][action] += self.learning_rate * (td_target - current_q)
 
     def update_learning_rate(self, new_lr):
-        """Dynamically update the learning rate during training."""
+        # Dynamically updating the learning rate during training.
         self.learning_rate = new_lr
 
     def decay_epsilon(self):
-        """Decay the epsilon value over time."""
+        # Decaying the epsilon value over time.
         self.epsilon = max(self.min_epsilon, self.epsilon * self.decay_rate)
-
-    '''def _discretize_state(self, state):
-        #return tuple(np.round(x, 1) for x in state)
-        ##num_bins = [6, 12, 12, 12]
-        num_bins = [12, 12, 12, 12]
-        state_bounds = [
-        [-2.4, 2.4],   # Cart Position
-        [-3.0, 3.0],   # Cart Velocity
-        [-0.418, 0.418], # Pole Angle (~24 degrees)
-        [-3.5, 3.5]    # Pole Velocity at tip
-        ]
-        if len(state) == 2:
-            active_bounds = state_bounds[2:]
-            active_bins = num_bins[2:]
-        else:
-            active_bounds = state_bounds
-            active_bins = num_bins
-        discretized = []
-        for i in range(len(state)):
-            # Scale the value into the bin index
-            # This maps the continuous value into a fixed integer between 0 and num_bins-1
-            bin_idx = np.digitize(state[i], np.linspace(active_bounds[i][0], active_bounds[i][1], active_bins[i] - 1))
-            discretized.append(int(bin_idx))
-            
-        return tuple(discretized)'''
+    
+    
+    # Discretizing states to be able to be used for training, due to complexity with not neural network based algorithms.
     def _discretize_state(self, state):
-        # 3. Dynamic Selection Logic
+        # Dynamic Selection Logic
         if len(state) == 2:
             # Use only theta and theta_dot indices [2, 3]
             active_bounds = self.state_bounds[2:]
@@ -272,95 +229,17 @@ class QLearningControl(ControlAlgorithm):
             
         return tuple(discretized)
 
-'''class SarsaControl(ControlAlgorithm):
-    def __init__(self, control_params, exploration_strategy):
-        super().__init__(control_params, exploration_strategy)
-        self.q_table = {}
-        self.state_bins = self._create_bins()  # Create bins for discretization
-        self.alpha = self.params.get('learning_rate_sarsa', 0.001)        ##################
-        self.epsilon = self.params['epsilon']  # Initial epsilon
-        self.epsilon_decay = self.params.get('epsilon_decay', 0.99)  # Decay factor
-        self.min_epsilon = self.params.get('min_epsilon', 0.01)  # Minimum epsilon
-
-    def _create_bins(self):
-        # Example binning for CartPole state
-        bins = {
-            'x': np.linspace(-4.8, 4.8, 10),  # Cart position
-            'x_dot': np.linspace(-3.0, 3.0, 10),  # Cart velocity
-            'theta': np.linspace(-0.418, 0.418, 10),  # Pole angle (in radians)
-            'theta_dot': np.linspace(-2.0, 2.0, 10)  # Pole angular velocity
-        }
-        return bins
-
-    def _discretize_state(self, state):
-    # Detect if we are looking at 2D or 4D
-      if len(state) == 2:
-        theta, theta_dot = state
-        state_discrete = (
-            np.digitize(theta, self.state_bins['theta']) - 1,
-            np.digitize(theta_dot, self.state_bins['theta_dot']) - 1
-        )
-      else:
-        # 4D Mode
-        x, x_dot, theta, theta_dot = state
-        state_discrete = (
-            np.digitize(x, self.state_bins['x']) - 1,
-            np.digitize(x_dot, self.state_bins['x_dot']) - 1,
-            np.digitize(theta, self.state_bins['theta']) - 1,
-            np.digitize(theta_dot, self.state_bins['theta_dot']) - 1
-        )
-      return state_discrete
-
-    def get_action(self, state):
-        state = self._discretize_state(state)
-
-        if state not in self.q_table:
-            self.q_table[state] = [0, 0]  # Initialize Q-values for unseen state
-
-        if np.random.rand() < self.epsilon:
-            action = np.random.choice(len(self.q_table[state]))  # Exploration
-        else:
-            action = np.argmax(self.q_table[state])  # Exploitation
-
-        return action
-
-    def update(self, state, action, reward, next_state, next_action, done):
-        state = self._discretize_state(state)
-        next_state = self._discretize_state(next_state)
-
-        if state not in self.q_table:
-            self.q_table[state] = [0, 0]
-        if next_state not in self.q_table:
-            self.q_table[next_state] = [0, 0]
-
-        # SARSA update rule
-        current_q = self.q_table[state][action]
-        next_q = self.q_table[next_state][next_action]
-
-        if done:
-            target = reward
-        else:
-            target = reward + self.params['discount_factor'] * next_q
-
-        new_q = current_q + self.alpha * (target - current_q)
-        #new_q = current_q + self.alpha * (reward + self.params['discount_factor'] * next_q - current_q)
-        self.q_table[state][action] = new_q
-
-    def decay_epsilon(self):
-        self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
-'''
-
 class SarsaControl(ControlAlgorithm):
     def __init__(self, control_params, exploration_strategy):
         super().__init__(control_params, exploration_strategy)
         self.q_table = {}
-        # 1. Use internal attributes for dynamic updates
+        # Use internal attributes for dynamic updates
         self.alpha = control_params.get('learning_rate_sarsa', 0.03) 
         self.epsilon = control_params['epsilon']
         self.decay_rate = control_params.get('decay_rate', 0.995)
         self.min_epsilon = control_params.get('min_epsilon', 0.01)
         
-        # 2. Pull bins and bounds from the params (no more hardcoding!)
+        # Pull bins and bounds from the params (no more hardcoding!)
         self.num_bins = control_params.get('num_bins', [12, 12, 12, 12])
         self.state_bounds = control_params.get('state_bounds')
 
@@ -381,7 +260,7 @@ class SarsaControl(ControlAlgorithm):
             
         return tuple(discretized)
 
-    def get_action(self, state):  # <--- Remove any extra arguments here
+    def get_action(self, state):
         state_d = self._discretize_state(state)
 
         if state_d not in self.q_table:
