@@ -23,10 +23,10 @@ CONTROL_PARAMS = {
     'buffer_size': 10000,  # For DQN
     'batch_size': 64,      # For DQN
     'update_target_steps': 1000,  # For DQN
-    'patience': 300,          
+    'patience': 150,          
     'min_delta': 0.05,       
-    'decay_factor': 0.8,
-    'min_lr': 0.005,
+    'decay_factor': 0.5,
+    'min_lr': 0.001,
     'num_bins': [12, 12, 12, 12],  # Add this!
     'state_bounds': [              # Add this!
         [-2.4, 2.4],     # x
