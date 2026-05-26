@@ -167,7 +167,13 @@ def tune_hyperparameters_dqn(model_class, exploration_strategy_class, cfg):
     result = gp_minimize(objective, space, n_calls=20, random_state=42)
 
     # Update cfg with best params
-    best_params = {param.name: val for param, val in zip(space, result.x)}
+    best_params = {
+    param.name:
+    int(val) if isinstance(val, np.integer)
+    else float(val) if isinstance(val, np.floating)
+    else val
+    for param, val in zip(space, result.x)
+    }
     cfg.CONTROL_PARAMS.update(best_params)
 
     print("\n✅ Optimization Complete!")

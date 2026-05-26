@@ -1,8 +1,0 @@
-{
-    "algorithm": "DQN",
-    "parameters": {
-        "discount_factor": 0.9833608377814674,
-        "epsilon": 1.0,
-        "decay_rate": 0.9941258069663835,
-        "learning_rate": 0.0010810985308338556,
-        "buffer_size": 
