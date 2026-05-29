@@ -48,11 +48,13 @@ This repository is a robust framework for training, tuning, and stress-testing *
 └── README.md                     # Documentation
 ```
 
-##💻 Setup & Usage
-###⚙️ Prerequisites
+---
+
+## 💻 Setup & Usage
+### ⚙️ Prerequisites
 All primary environment requirements are isolated within requirements.txt. Core dependencies rely on gymnasium, torch, joblib, and ipywidgets.
 
-###🌐 Google Colab Workflow
+### 🌐 Google Colab Workflow
 
 The project is optimized for a Colab-first workflow. The setup cells in the notebook will:
 1. Clone the repository.
@@ -80,7 +82,7 @@ Stress Test: Injects environmental physical stressors to determine edge-case bal
 
 ---
 
-##📊 Evaluation & Analysis
+## 📊 Evaluation & Analysis
 
 The framework utilizes a multi-tier assessment methodology to validate how effectively models stabilize the system under shifting constraints.
 
