@@ -1,0 +1,17 @@
+{
+    "algorithm": "DQN",
+    "parameters": {
+        "discount_factor": 0.999,
+        "epsilon": 1.0,
+        "decay_rate": 0.9947084483973919,
+        "learning_rate": 0.0001,
+        "buffer_size": 30000,
+        "batch_size": 32,
+        "max_steps": 500,
+        "total_episodes": 1000
+    },
+    "state_mode": "4D",
+    "action_mode": "discrete",
+    "total_episodes": 1000,
+    "stop_logic": "overfitting"
+}
